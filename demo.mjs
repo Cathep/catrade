@@ -117,11 +117,16 @@ export async function startDemo() {
           }
           multipliers.set(symbol, mults);
         }
-        const probe = await proposal(symbol, sell, mults[0], 1, 1);
+        const probe = await proposal(symbol, sell, mults[0], 0.5, 0.5);
         const spot = Number(probe.spot);
+        const v = probe.validation_params || {};
+        const slMin = Number(v.stop_loss?.min ?? 0.1);
+        const slMax = Number(v.stop_loss?.max ?? 1);
+        const tpMin = Number(v.take_profit?.min ?? 0.1);
+        const tpMax = Number(v.take_profit?.max ?? 50);
         const mult = closest(mults, spot / dist);
-        const sl = clamp((STAKE * mult * dist) / spot, 0.1, 1);
-        const tp = clamp((STAKE * mult * reward) / spot, 0.1, 50);
+        const sl = clamp((STAKE * mult * dist) / spot, slMin, slMax);
+        const tp = clamp((STAKE * mult * reward) / spot, tpMin, tpMax);
         const quote = await proposal(symbol, sell, mult, Number(sl.toFixed(2)), Number(tp.toFixed(2)));
         if (process.env.DRY === "1") {
           return { ok: true, dry: true, tight: (STAKE * mult * dist) / spot > 1 };
