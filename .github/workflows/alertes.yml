@@ -34,11 +34,15 @@ jobs:
           if [ -n "${{ github.event.inputs.style }}" ]; then
             echo "STYLE=${{ github.event.inputs.style }}" >> "$GITHUB_ENV"
           fi
-      - run: node notify.mjs
+      - name: lire les marchés et le démo
+        env:
+          DERIV_TOKEN: ${{ secrets.DERIV_TOKEN }}
+          DERIV_APP_ID: ${{ secrets.DERIV_APP_ID }}
+        run: node notify.mjs
       - name: garder les alertes déjà envoyées
         run: |
           git config user.email "cathep@users.noreply.github.com"
           git config user.name "Cathep"
-          git add notify-seen.json
+          git add notify-seen.json demo-trades.json
           git diff --cached --quiet || git commit -m "Mémoire des alertes déjà envoyées"
           git push
