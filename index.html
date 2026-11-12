@@ -31,8 +31,12 @@
     </div>
     <div class="seg families" id="families" role="group" aria-label="Famille"></div>
     <div class="alertbox">
-      <button class="btn" id="notif" type="button">Activer les alertes</button>
-      <p id="notif-note">Comme sur le terminal : un nouveau W ou M, pas chaque bougie. Style, sens, cou, second extrémum. Cette page n'alerte que tant qu'elle reste ouverte. Écran verrouillé : une veille arrive dans Grok à 8 h, 13 h et 18 h.</p>
+      <div>
+        <p>Toutes les 4 heures, même page fermée. Scalping, Day et Swing tournent. Chaque nouveau W ou M part dans ntfy, une notification par marché.</p>
+        <p>Dans l'appli ntfy, abonne-toi au sujet <b class="topic" id="topic">catrade-a8e3f19c4d</b>.</p>
+      </div>
+      <button class="btn" id="copyTopic" type="button">Copier le sujet</button>
+      <button class="btn" id="notif" type="button">Alerter dans cette page</button>
     </div>
     <p class="status" id="status">En attente des prix.</p>
   </section>
@@ -81,7 +85,7 @@
   </div>
   <footer class="note glass">CATRADE 4.42. Tous les marchés Deriv ouverts : Volatility, Boom, Crash, Jump, Step, indices, or, forex. Pas Weltrade.</footer>
 </div>
-<script src="engine.js?v=8"></script>
-<script src="app.js?v=8"></script>
+<script src="engine.js?v=9"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>

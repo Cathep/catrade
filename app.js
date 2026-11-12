@@ -302,6 +302,12 @@ document.addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (!b) return;
   if (b.id === "refresh") scan();
+  else if (b.id === "copyTopic") {
+    const topic = $("#topic").textContent;
+    const done = () => { b.textContent = "Sujet copié"; };
+    if (navigator.clipboard) navigator.clipboard.writeText(topic).then(done, done);
+    else done();
+  }
   else if (b.dataset.style) { styleId = b.dataset.style; store.set("ct.style", styleId); paintChrome(); scan(); }
   else if (b.dataset.family) { family = b.dataset.family; store.set("ct.family", family); paintChrome(); scan(); }
   else if (b.id === "manual") { manual = !manual; store.set("ct.manual", manual); paintChrome(); scan(); }

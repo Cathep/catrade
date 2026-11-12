@@ -1,0 +1,26 @@
+name: alertes
+
+on:
+  schedule:
+    - cron: "0 */4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ntfy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node notify.mjs
+      - name: garder les alertes déjà envoyées
+        run: |
+          git config user.email "cathep@users.noreply.github.com"
+          git config user.name "Cathep"
+          git add notify-seen.json
+          git diff --cached --quiet || git commit -m "Mémoire des alertes déjà envoyées"
+          git push

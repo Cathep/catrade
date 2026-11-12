@@ -287,10 +287,14 @@
 }
 
 .alertbox p {
-  margin: 0;
-  flex: 1 1 16rem;
+  margin: 0 0 0.35rem;
   color: var(--color-muted);
   font-size: 0.85rem;
+}
+
+.topic {
+  color: var(--color-ink);
+  word-break: break-all;
 }
 
 .status {
