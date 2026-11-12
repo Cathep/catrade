@@ -477,9 +477,9 @@
 }
 
 .lv {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
   margin: 0;
 }
 
@@ -487,8 +487,14 @@
 .meta div {
   background: rgb(255 255 255 / 0.06);
   border-radius: 12px;
-  padding: 0.5rem 0.625rem;
+  padding: 0.55rem 0.75rem;
   min-width: 0;
+}
+
+.lv div {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
 }
 
 .lv dt,
@@ -499,10 +505,10 @@
 
 .lv dd,
 .meta dd {
-  margin: 0;
+  margin: 0 0 0 auto;
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 0.95rem;
+  font-size: 1rem;
   line-height: 1.25;
   letter-spacing: -0.01em;
   word-break: break-word;
