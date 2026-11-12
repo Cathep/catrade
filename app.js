@@ -256,7 +256,7 @@ async function scan() {
   btn.disabled = false;
   btn.textContent = "Actualiser";
   const failed = reports.filter((r) => r.state === "erreur").length;
-  $("#status").textContent = failed === MARKETS.length ? "Aucun prix reçu. Deriv ne répond pas." : `Prix Deriv à ${hm(scannedAt)}, en ${spec.tf}. Le nom FX Vol est celui de Weltrade : le cours n'est pas le même.`;
+  $("#status").textContent = failed === MARKETS.length ? "Aucun prix reçu. Deriv ne répond pas." : `Prix Deriv à ${hm(scannedAt)}, en ${spec.tf}. Ce ne sont pas les FX Vol Weltrade.`;
   render(true);
   notify();
 }

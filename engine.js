@@ -69,11 +69,11 @@ var CT = (() => {
     }
   ];
   var MARKETS = [
-    { id: "R_10", sym: "V10", name: "Volatility 10", aka: "FX Vol 20", cls: "synth", dp: 3, cost: 8e-5 },
-    { id: "R_25", sym: "V25", name: "Volatility 25", aka: "FX Vol 40", cls: "synth", dp: 3, cost: 8e-5 },
-    { id: "R_50", sym: "V50", name: "Volatility 50", aka: "FX Vol 60", cls: "synth", dp: 4, cost: 8e-5 },
-    { id: "R_75", sym: "V75", name: "Volatility 75", aka: "FX Vol 80", cls: "synth", dp: 4, cost: 8e-5 },
-    { id: "R_100", sym: "V100", name: "Volatility 100", aka: "FX Vol 99", cls: "synth", dp: 2, cost: 8e-5 },
+    { id: "R_10", sym: "V10", name: "Volatility 10", cls: "synth", dp: 3, cost: 8e-5 },
+    { id: "R_25", sym: "V25", name: "Volatility 25", cls: "synth", dp: 3, cost: 8e-5 },
+    { id: "R_50", sym: "V50", name: "Volatility 50", cls: "synth", dp: 4, cost: 8e-5 },
+    { id: "R_75", sym: "V75", name: "Volatility 75", cls: "synth", dp: 4, cost: 8e-5 },
+    { id: "R_100", sym: "V100", name: "Volatility 100", cls: "synth", dp: 2, cost: 8e-5 },
     { id: "1HZ15V", sym: "V15 1s", name: "Volatility 15 (1s)", cls: "synth", dp: 3, cost: 8e-5 },
     { id: "1HZ25V", sym: "V25 1s", name: "Volatility 25 (1s)", cls: "synth", dp: 2, cost: 8e-5 },
     { id: "1HZ50V", sym: "V50 1s", name: "Volatility 50 (1s)", cls: "synth", dp: 2, cost: 8e-5 },
