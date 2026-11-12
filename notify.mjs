@@ -1,6 +1,5 @@
 import fs from "fs";
 import vm from "vm";
-import { startDemo } from "./demo.mjs";
 
 const TOPIC = process.env.NTFY_TOPIC || "catrade-a8e3f19c4d";
 const DRY = process.env.DRY === "1";
@@ -14,8 +13,6 @@ const styles = wanted ? STYLES.filter((s) => s.id === wanted) : STYLES;
 if (!styles.length) throw new Error(`style inconnu : ${wanted}`);
 const seenPath = new URL("./notify-seen.json", import.meta.url);
 const seen = new Set(fs.existsSync(seenPath) ? JSON.parse(fs.readFileSync(seenPath, "utf8")) : []);
-const tradesPath = new URL("./demo-trades.json", import.meta.url);
-const trades = fs.existsSync(tradesPath) ? JSON.parse(fs.readFileSync(tradesPath, "utf8")) : [];
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -109,10 +106,6 @@ const cache = new Map();
 const ws = await openDeriv();
 const now = Date.now() / 1000;
 let sent = 0;
-const demo = DRY ? null : await startDemo().catch((e) => {
-  console.error("démo", e.message);
-  return null;
-});
 
 try {
   for (const style of styles) {
@@ -136,13 +129,6 @@ try {
       const sens = sell ? "SELL" : "BUY";
       const title = `${sens} ${mk.name}`;
       const tps = r.levels.tps && r.levels.tps.length ? r.levels.tps : [{ price: r.levels.tp, reward: r.levels.reward }];
-      let deal = null;
-      if (demo) {
-        deal = await demo.open({ symbol: mk.id, sell, dist: r.levels.dist, reward: tps[0].reward || r.levels.reward });
-        if (deal.ok && !deal.dry) {
-          trades.push({ at: new Date().toISOString(), symbol: mk.id, style: style.id, sens, contractId: deal.contractId, tight: !!deal.tight });
-        } else if (!deal.ok) console.error("position", mk.id, deal.reason);
-      }
       const body = [
         sens,
         `${style.label} ${style.tf}`,
@@ -150,8 +136,7 @@ try {
         `SL ${fmt(r.levels.sl, mk.dp)} (${distText(mk, r.levels.dist)})`,
         ...tps.map((t, i) => `TP ${i + 1} ${fmt(t.price, mk.dp)} (${distText(mk, t.reward)})`),
         `Fermer au plus tard ${deadline(now, style)}.`,
-        deal?.ok ? "Position démo 1 $ ouverte." : "",
-      ].filter(Boolean).join("\n");
+      ].join("\n");
       await publish(title, body, sell);
       seen.add(id);
       sent++;
@@ -159,11 +144,7 @@ try {
   }
 } finally {
   ws.close();
-  if (demo) demo.close();
-  if (!DRY) {
-    fs.writeFileSync(seenPath, JSON.stringify([...seen], null, 2));
-    fs.writeFileSync(tradesPath, JSON.stringify(trades, null, 2));
-  }
+  if (!DRY) fs.writeFileSync(seenPath, JSON.stringify([...seen], null, 2));
 }
 
 console.log(`${styles.map((s) => s.id).join(",")} : envoyées ${sent}, mémoire ${seen.size}`);

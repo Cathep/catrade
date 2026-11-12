@@ -34,11 +34,7 @@ jobs:
           if [ -n "${{ github.event.inputs.style }}" ]; then
             echo "STYLE=${{ github.event.inputs.style }}" >> "$GITHUB_ENV"
           fi
-      - name: lire les marchés et le démo
-        env:
-          DERIV_TOKEN: ${{ secrets.DERIV_TOKEN }}
-          DERIV_APP_ID: ${{ secrets.DERIV_APP_ID }}
-        run: node notify.mjs
+      - run: node notify.mjs
       - name: garder les alertes déjà envoyées
         run: |
           git config user.email "cathep@users.noreply.github.com"
