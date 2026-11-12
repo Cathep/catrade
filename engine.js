@@ -126,7 +126,7 @@ var CT = (() => {
     { id: "WLDUSD", sym: "Basket", name: "USD Basket", aka: "Basket", cls: "synth", dp: 3, cost: 8e-5 },
     { id: "RDBEAR", sym: "Daily", name: "Bear Market Index", aka: "Daily", cls: "synth", dp: 4, cost: 8e-5 },
     { id: "RDBULL", sym: "Daily", name: "Bull Market Index", aka: "Daily", cls: "synth", dp: 4, cost: 8e-5 },
-    { id: "frxXAUUSD", sym: "M\xE9tal", name: "Gold/USD", aka: "M\xE9tal", cls: "gold", dp: 2, cost: 15e-5 },
+    { id: "frxXAUUSD", sym: "M\xE9tal", name: "XAUUSD", aka: "M\xE9tal", cls: "gold", dp: 2, cost: 15e-5 },
     { id: "frxXPDUSD", sym: "M\xE9tal", name: "Palladium/USD", aka: "M\xE9tal", cls: "fx", dp: 2, pip: 0.01, cost: 15e-5 },
     { id: "frxXPTUSD", sym: "M\xE9tal", name: "Platinum/USD", aka: "M\xE9tal", cls: "fx", dp: 2, pip: 0.01, cost: 15e-5 },
     { id: "frxXAGUSD", sym: "M\xE9tal", name: "Silver/USD", aka: "M\xE9tal", cls: "fx", dp: 4, pip: 1e-4, cost: 15e-5 },
