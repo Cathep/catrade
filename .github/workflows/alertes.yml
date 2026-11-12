@@ -21,6 +21,9 @@ permissions:
 jobs:
   ntfy:
     runs-on: ubuntu-latest
+    concurrency:
+      group: alertes
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

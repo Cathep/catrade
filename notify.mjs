@@ -3,7 +3,6 @@ import vm from "vm";
 
 const TOPIC = process.env.NTFY_TOPIC || "catrade-a8e3f19c4d";
 const DRY = process.env.DRY === "1";
-const FAMILIES = new Set(["Volatility", "Boom", "Crash", "Jump", "Step"]);
 const ctx = {};
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(new URL("./engine.js", import.meta.url), "utf8"), ctx);
@@ -102,7 +101,7 @@ async function publish(title, body, sell) {
   await sleep(350);
 }
 
-const markets = MARKETS.filter((m) => FAMILIES.has(m.aka));
+const markets = MARKETS;
 const cache = new Map();
 const ws = await openDeriv();
 const now = Date.now() / 1000;
