@@ -266,6 +266,18 @@
   color: var(--color-bg);
 }
 
+.seg.families {
+  flex-wrap: wrap;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.seg.families button {
+  min-height: 36px;
+  padding: 0.28rem 0.65rem;
+  font-size: 0.82rem;
+}
+
 .status {
   margin: 0.75rem 0 0;
   font-size: 0.875rem;

@@ -20,6 +20,10 @@ function esc(s) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let styleId = store.get("ct.style", "day");
+let family = store.get("ct.family", "Volatility");
+const FAMILIES = [];
+for (const m of MARKETS) if (m.aka && !FAMILIES.includes(m.aka)) FAMILIES.push(m.aka);
+if (!FAMILIES.includes(family)) family = "Volatility";
 let manual = store.get("ct.manual", true);
 let reports = [];
 let busy = false;
@@ -226,6 +230,7 @@ function render(fresh) {
 
 function paintChrome() {
   $("#styles").innerHTML = STYLES.map((s) => `<button type="button" aria-pressed="${styleId === s.id}" data-style="${s.id}">${esc(s.label)}<span class="buf">${esc(s.tf)}</span></button>`).join("");
+  $("#families").innerHTML = FAMILIES.map((f) => `<button type="button" aria-pressed="${family === f}" data-family="${esc(f)}">${esc(f)}</button>`).join("");
   const b = $("#manual");
   b.className = manual ? "btn on" : "btn";
   b.setAttribute("aria-pressed", String(manual));
@@ -239,11 +244,12 @@ async function scan() {
   btn.disabled = true;
   btn.textContent = "Lecture…";
   const spec = styleById(styleId);
-  $("#status").textContent = `Lecture des prix : 0 sur ${MARKETS.length}`;
+  const list = MARKETS.filter((m) => m.aka === family);
+  $("#status").textContent = `Lecture des prix : 0 sur ${list.length}`;
   const out = [];
-  for (let i = 0; i < MARKETS.length; i += 3) {
+  for (let i = 0; i < list.length; i += 3) {
     if (token !== gen) return;
-    const batch = MARKETS.slice(i, i + 3);
+    const batch = list.slice(i, i + 3);
     await Promise.all(batch.map(async (mk, k) => {
       const idx = i + k;
       try { out[idx] = evaluate(mk, await fetchOHLC(mk.id, spec.step), Date.now() / 1000, spec, manual); }
@@ -251,7 +257,7 @@ async function scan() {
     }));
     reports = out.filter(Boolean);
     scannedAt = Date.now();
-    $("#status").textContent = `Lecture des prix : ${Math.min(i + batch.length, MARKETS.length)} sur ${MARKETS.length}`;
+    $("#status").textContent = `Lecture des prix : ${Math.min(i + batch.length, list.length)} sur ${list.length}`;
     render(i === 0);
   }
   if (token !== gen) return;
@@ -259,7 +265,7 @@ async function scan() {
   btn.disabled = false;
   btn.textContent = "Actualiser";
   const failed = reports.filter((r) => r.state === "erreur").length;
-  $("#status").textContent = failed === MARKETS.length ? "Aucun prix reçu. Deriv ne répond pas." : `Prix Deriv à ${hm(scannedAt)}, en ${spec.tf}. Ce ne sont pas les FX Vol Weltrade.`;
+  $("#status").textContent = failed === list.length ? "Aucun prix reçu. Deriv ne répond pas." : `Prix Deriv à ${hm(scannedAt)}, ${family}, en ${spec.tf}.`;
   render(true);
   notify();
 }
@@ -294,6 +300,7 @@ document.addEventListener("click", (e) => {
   if (!b) return;
   if (b.id === "refresh") scan();
   else if (b.dataset.style) { styleId = b.dataset.style; store.set("ct.style", styleId); paintChrome(); scan(); }
+  else if (b.dataset.family) { family = b.dataset.family; store.set("ct.family", family); paintChrome(); scan(); }
   else if (b.id === "manual") { manual = !manual; store.set("ct.manual", manual); paintChrome(); scan(); }
   else if (b.dataset.take) choose(b.dataset.take, "pris");
   else if (b.dataset.skip) choose(b.dataset.skip, "passe");
