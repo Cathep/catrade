@@ -106,6 +106,7 @@ const cache = new Map();
 const ws = await openDeriv();
 const now = Date.now() / 1000;
 let sent = 0;
+const picks = [];
 
 try {
   for (const style of styles) {
@@ -121,10 +122,18 @@ try {
         cache.set(`${mk.id}:${style.step}`, bars);
         await sleep(700);
       }
-      const r = evaluate(mk, bars, now, style, true);
-      if (!r.pattern || r.state !== "avis" || !r.levels) continue;
+      const r = evaluate(mk, bars, now, style, false);
+      if (!r.pattern || r.state !== "avis" || !r.levels || !(r.levels.rr >= 2)) continue;
       const id = `${mk.id}:${style.id}:${r.pattern.key}`;
       if (seen.has(id)) continue;
+      const prev = picks.find((p) => p.mk.id === mk.id);
+      if (!prev || r.levels.rr > prev.r.levels.rr) {
+        if (prev) picks.splice(picks.indexOf(prev), 1);
+        picks.push({ mk, style, r, id });
+      }
+    }
+  }
+  for (const { mk, style, r, id } of picks) {
       const sell = r.dir < 0;
       const sens = sell ? "SELL" : "BUY";
       const title = `${sens} ${mk.name}`;
@@ -140,7 +149,6 @@ try {
       await publish(title, body, sell);
       seen.add(id);
       sent++;
-    }
   }
 } finally {
   ws.close();
