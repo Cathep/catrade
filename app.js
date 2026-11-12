@@ -175,7 +175,7 @@ function card(r, i) {
     : ch && ch.c === "passe"
       ? `<p class="taken">Vous avez passé ce cas.</p><div class="choice"><button class="btn" type="button" data-undo="${esc(r.id)}">Revoir</button></div>`
       : `<div class="choice"><button class="btn go" type="button" data-take="${esc(r.id)}">Je prends</button><button class="btn" type="button" data-skip="${esc(r.id)}">Je passe</button></div>`;
-  return `<article class="card glass rise" data-dir="${r.dir}" data-choice="${ch ? ch.c : ""}" style="--i:${i}">
+  return `<article class="card glass rise" id="m-${esc(r.id)}" data-dir="${r.dir}" data-choice="${ch ? ch.c : ""}" style="--i:${i}">
     <div class="head"><div><p class="name">${esc(mk.name)}${mk.aka ? `<span class="buf">${esc(mk.aka)}</span>` : ""}<span class="buf">${esc(r.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div>
       <div class="ring" style="--p:${r.record.n ? Math.round(w) : 0};--ringc:${ringc}" role="img" aria-label="${r.record.n ? Math.round(w) + " % de cas gagnants" : "Peu de cas"}"><b>${r.record.n ? Math.round(w) + " %" : "—"}<small>${r.record.n ? "gagnants" : "peu de cas"}</small></b></div>
     </div>
@@ -220,8 +220,14 @@ function render(fresh) {
   grid.innerHTML = avis.length ? avis.map(card).join("") : `<div class="glass empty">${!reports.length || busy ? "Lecture en cours." : manual ? "Aucun marché ne passe les filtres encore actifs." : "Aucun motif ne passe les anciens critères."}</div>`;
   $("#others").innerHTML = rest.length ? rest.map((r) => {
     const mk = MARKETS.find((m) => m.id === r.id);
-    return `<li><b>${esc(mk.name)}</b><b>${r.price != null ? fmt(r.price, mk.dp) : "?"}</b><span>${esc(r.reason)}</span></li>`;
+    return `<li id="m-${esc(r.id)}"><b>${esc(mk.name)}</b><b>${r.price != null ? fmt(r.price, mk.dp) : "?"}</b><span>${esc(r.reason)}</span></li>`;
   }).join("") : `<li><span>${reports.length ? "Tous les marchés lus ont un sens à examiner." : "Pas encore de lecture."}</span></li>`;
+  const order = new Map(MARKETS.map((m, i) => [m.id, i]));
+  const listed = reports.slice().sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  $("#names").innerHTML = listed.map((r) => {
+    const mk = MARKETS.find((m) => m.id === r.id);
+    return `<a class="namechip${r.state === "avis" ? " on" : ""}" href="#m-${esc(r.id)}">${esc(mk.name)}</a>`;
+  }).join("");
   const withPattern = avis.filter((r) => r.pattern).length;
   $("#headline").textContent = !reports.length ? "Lecture des marchés…" : reports.every((r) => r.state === "erreur") ? "Prix illisibles." : avis.length ? `${avis.length} marché${avis.length > 1 ? "s" : ""} à examiner.` : "Rien à proposer pour l'instant.";
   $("#sub").textContent = !reports.length ? "Les fiches arrivent dès que les prix sont lus." : reports.every((r) => r.state === "erreur") ? "La source des prix ne répond pas. Réessayez." : manual ? `${withPattern ? withPattern + " W ou M détecté" + (withPattern > 1 ? "s" : "") + ". " : "Aucun W/M détecté. "}Le sens vient des autres filtres. La figure, c'est à vous de la juger. Aucun ordre n'est envoyé.` : "Mode historique : sans W/M lent, confirmé et réintégré, le sens reste refusé.";
