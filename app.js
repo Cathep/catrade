@@ -168,6 +168,21 @@ function moneyFor(mk, price, dist, lots) {
   }
   return { v, ccy: s.ccy };
 }
+function planOf(r) {
+  if (!r) return null;
+  if (r.levels) return Object.assign({}, r.levels, { status: "ouvert" });
+  const p = r.pattern;
+  if (!p || !(r.atr > 0)) return null;
+  const pad = 0.12 * r.atr;
+  const sl = p.dir > 0 ? Math.min(p.ext1, p.ext2) - pad : Math.max(p.ext1, p.ext2) + pad;
+  const tp = p.dir > 0 ? p.neck + p.height : p.neck - p.height;
+  const entry = p.neck;
+  const dist = Math.abs(entry - sl);
+  const reward = Math.abs(tp - entry);
+  if (!(dist > 0) || !(reward > 0)) return null;
+  const status = p.slHit ? "stop" : p.tpHit || p.burnt ? "objectif" : p.tooFar ? "loin" : "trace";
+  return { entry, sl, tp, dist, reward, rr: reward / dist, entryKind: "cou", status };
+}
 function moneyText(x, ccy) {
   const sign = x >= 0 ? "+" : "−";
   const body = num(Math.abs(x), 2);
@@ -255,8 +270,9 @@ function chart(r) {
   const bars = r.candles;
   if (!bars || bars.length < 2 || r.price == null) return "";
   const W = 300, H = 92;
-  const hi = Math.max(...bars.map((b) => b.h), r.pattern ? r.pattern.neck : -Infinity);
-  const lo = Math.min(...bars.map((b) => b.l), r.pattern ? Math.min(r.pattern.ext1, r.pattern.ext2) : Infinity);
+  const tpP = r.pattern ? (r.pattern.dir > 0 ? r.pattern.neck + r.pattern.height : r.pattern.neck - r.pattern.height) : null;
+  const hi = Math.max(...bars.map((b) => b.h), r.pattern ? r.pattern.neck : -Infinity, tpP ?? -Infinity);
+  const lo = Math.min(...bars.map((b) => b.l), r.pattern ? Math.min(r.pattern.ext1, r.pattern.ext2) : Infinity, tpP ?? Infinity);
   const span = hi - lo || 1;
   const x = (i) => (i / (bars.length - 1)) * W;
   const y = (p) => 6 + ((hi - p) / span) * (H - 14);
@@ -271,7 +287,7 @@ function chart(r) {
   if (r.pattern) {
     const neck = y(r.pattern.neck);
     const extP = r.pattern.dir > 0 ? Math.min(r.pattern.ext1, r.pattern.ext2) : Math.max(r.pattern.ext1, r.pattern.ext2);
-    guides = `<line x1="0" x2="${W}" y1="${neck}" y2="${neck}" stroke="var(--color-focus)" stroke-dasharray="4 3" stroke-width="1"/><line x1="0" x2="${W}" y1="${y(extP)}" y2="${y(extP)}" stroke="var(--color-warn)" stroke-dasharray="2 3" stroke-width="1"/>`;
+    guides = `<line x1="0" x2="${W}" y1="${neck}" y2="${neck}" stroke="var(--color-focus)" stroke-dasharray="4 3" stroke-width="1"/><line x1="0" x2="${W}" y1="${y(extP)}" y2="${y(extP)}" stroke="var(--color-warn)" stroke-dasharray="2 3" stroke-width="1"/><line x1="0" x2="${W}" y1="${y(tpP)}" y2="${y(tpP)}" stroke="var(--color-buy)" stroke-dasharray="4 3" stroke-width="1"/>`;
   }
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Dernières bougies">${bodies}${guides}</svg>`;
 }
@@ -283,17 +299,25 @@ function card(r, i) {
   const [rk, rl] = riskOf(r);
   const ringc = r.record.n < 8 ? "var(--color-muted)" : w >= 45 ? "var(--color-buy)" : "var(--color-warn)";
   const ch = choiceFor(r);
-  const kind = !r.pattern ? "W/M non détecté" : r.pattern.slow && r.pattern.secondPart && r.pattern.reintegrated && !r.pattern.tooFar ? `${r.pattern.side} à juger` : `${r.pattern.side} possible`;
-  const kindOk = r.pattern && r.pattern.reintegrated && r.pattern.secondPart && !r.pattern.slHit;
-  const quote = mk.id.startsWith("USD") ? null : quoteOf(mk.id.slice(3));
-  const levels = r.levels ? `<dl class="lv">
-      <div><dt>${r.levels.entryKind === "cou" ? "Entrée au cou" : "Entrée"}</dt><dd>${fmt(r.levels.entry, mk.dp)}</dd></div>
-      <div><dt>Stop</dt><dd class="sl">${fmt(r.levels.sl, mk.dp)}</dd><span>${esc(distText(mk, r.levels.dist))}</span></div>
-      <div><dt>Objectif</dt><dd class="tp">${fmt(r.levels.tp, mk.dp)}</dd><span>${esc(distText(mk, r.levels.reward))} · ${num(r.levels.rr, 2)} R</span></div>
+  const plan = planOf(r);
+  const finished = plan && (plan.status === "objectif" || plan.status === "stop");
+  const kind = !r.pattern ? "W/M non détecté" : plan && plan.status === "objectif" ? "Objectif atteint" : plan && plan.status === "stop" ? "Protection touchée" : r.pattern.slow && r.pattern.secondPart && r.pattern.reintegrated && !r.pattern.tooFar ? `${r.pattern.side} à juger` : `${r.pattern.side} possible`;
+  const kindOk = !finished && r.pattern && r.pattern.reintegrated && r.pattern.secondPart && !r.pattern.slHit;
+  const move = plan && r.price != null ? r.dir * (r.price - plan.entry) : 0;
+  const levels = plan ? `<dl class="lv">
+      <div><dt>${plan.entryKind === "cou" ? "Entrée au cou" : "Entrée"}</dt><dd>${fmt(plan.entry, mk.dp)}</dd></div>
+      <div><dt>Protection</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${esc(distText(mk, plan.dist))}</span></div>
+      <div><dt>Objectif</dt><dd class="tp">${fmt(plan.tp, mk.dp)}</dd><span>${esc(distText(mk, plan.reward))} · ${num(plan.rr, 2)} R</span></div>
     </dl>` + (r.pattern ? `<dl class="meta">
       <div><dt>Cou</dt><dd>${fmt(r.pattern.neck, mk.dp)}</dd><span>trait bleu</span></div>
-      <div><dt>${r.pattern.side === "W" ? "2e creux" : "2e sommet"}</dt><dd>${fmt(r.pattern.ext2, mk.dp)}</dd><span>trait ambre${r.levels ? (() => { const m = moneyFor(mk, r.price ?? r.levels.entry, r.levels.dist, lotFor(mk)); return ` · ${num(Math.abs(m.v), 2)} ${m.ccy === "USD" ? "$" : m.ccy} pour ${num(lotFor(mk), lotDigits(specOf(mk).min))} lot`; })() : ""}</span></div>
-    </dl>` : "") : `<p class="taken">Pas de niveaux proposés : la géométrie du motif manque, ou elle est déjà invalidée.</p>`;
+      <div><dt>${r.pattern.side === "W" ? "2e creux" : "2e sommet"}</dt><dd>${fmt(r.pattern.ext2, mk.dp)}</dd><span>trait ambre${(() => { const m = moneyFor(mk, r.price ?? plan.entry, plan.dist, lotFor(mk)); return ` · ${num(Math.abs(m.v), 2)} ${m.ccy === "USD" ? "$" : m.ccy} pour ${num(lotFor(mk), lotDigits(specOf(mk).min))} lot`; })()}</span></div>
+    </dl>` : "") + (plan.status === "objectif"
+      ? `<p class="taken">Objectif déjà atteint. Depuis l'entrée : ${move >= 0 ? "+" : "−"}${esc(distText(mk, Math.abs(move)))}. Ce n'est plus une nouvelle entrée.</p>`
+      : plan.status === "stop"
+        ? `<p class="taken">Protection déjà touchée. Le scénario est terminé.</p>`
+        : plan.status === "loin"
+          ? `<p class="taken">Prix trop éloigné du cou. Les niveaux restent ceux du motif, sans nouvelle entrée.</p>`
+          : "") : `<p class="taken">Pas de niveaux proposés : la géométrie du motif manque.</p>`;
   const notes = r.notes.slice(0, 3).map((n) => `<li>${esc(n)}</li>`).join("");
   const past = r.record.n
     ? `${r.record.n} passages sur ~${r.days} j. Résultat moyen ${r.record.avg >= 0 ? "+" : "−"}${num(Math.abs(r.record.avg), 2)} R.`
@@ -301,7 +325,7 @@ function card(r, i) {
   const spec = specOf(mk);
   const choices = lotChoices(spec);
   const used = lotFor(mk);
-  const sim = r.levels ? `<details class="sim" data-id="${esc(r.id)}"><summary>Simuler un lot</summary>
+  const sim = plan ? `<details class="sim" data-id="${esc(r.id)}"><summary>Simuler un lot</summary>
       <div class="lots" role="group" aria-label="Lot">
         ${choices.map((v) => `<button type="button" class="${Math.abs(used - v) < 1e-9 ? "on" : ""}" data-lot="${v}">${num(v, lotDigits(spec.min))}</button>`).join("")}
       </div>
@@ -309,7 +333,9 @@ function card(r, i) {
       <dl class="sim-r" data-sim="out"></dl>
       <p class="sim-n" data-sim="note"></p>
     </details>` : "";
-  const actions = ch && ch.c === "pris"
+  const actions = finished
+    ? ""
+    : ch && ch.c === "pris"
     ? `<p class="taken">Vous avez pris ce cas. Placez-le vous-même, avec ces niveaux, si la figure vous convient.</p><div class="choice"><button class="btn" type="button" data-undo="${esc(r.id)}">Annuler mon choix</button></div>`
     : ch && ch.c === "passe"
       ? `<p class="taken">Vous avez passé ce cas.</p><div class="choice"><button class="btn" type="button" data-undo="${esc(r.id)}">Revoir</button></div>`
@@ -318,7 +344,7 @@ function card(r, i) {
     <div class="head"><div><p class="name">${esc(mk.name)}${mk.aka ? `<span class="buf">${esc(mk.aka)}</span>` : ""}<span class="buf">${esc(r.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div>
       <div class="ring" style="--p:${r.record.n ? Math.round(w) : 0};--ringc:${ringc}" role="img" aria-label="${r.record.n ? Math.round(w) + " % de cas gagnants" : "Peu de cas"}"><b>${r.record.n ? Math.round(w) + " %" : "—"}<small>${r.record.n ? "gagnants" : "peu de cas"}</small></b></div>
     </div>
-    <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="${kindOk ? "kind ok" : "kind"}">${esc(kind)}</span><span class="buf">buffer ${r.buffer > 0 ? "+" + r.buffer : r.buffer}</span><span class="subcall">${r.manual ? "Sens à examiner, pas une entrée automatique." : "Mode historique : le motif filtre le sens."}</span></div>
+    <div><span class="call">${finished ? (sell ? "Vente terminée" : "Achat terminé") : sell ? "Vendre" : "Acheter"}</span><span class="${kindOk ? "kind ok" : "kind"}">${esc(kind)}</span><span class="buf">buffer ${r.buffer > 0 ? "+" + r.buffer : r.buffer}</span><span class="subcall">${finished ? "Le mouvement a déjà touché son niveau. Aucun ordre n'est envoyé." : r.manual ? "Sens à examiner, pas une entrée automatique." : "Mode historique : le motif filtre le sens."}</span></div>
     ${chart(r)}
     ${levels}
     <div class="risk" data-r="${rk}"><b class="lvl">${rl}</b><ul><li>${esc(r.reason)}</li>${notes}<li>${esc(past)}</li></ul></div>
@@ -330,15 +356,16 @@ function card(r, i) {
 function simulate(box) {
   const id = box.dataset.id;
   const r = reports.find((x) => x.id === id);
-  if (!r || !r.levels) return;
+  const plan = planOf(r);
+  if (!plan) return;
   const mk = MARKETS.find((m) => m.id === id);
   const spec = specOf(mk);
   const lots = lotFor(mk);
-  const price = r.price ?? r.levels.entry;
-  const loss = moneyFor(mk, price, r.levels.dist, lots);
-  const gain = moneyFor(mk, price, r.levels.reward, lots);
+  const price = r.price ?? plan.entry;
+  const loss = moneyFor(mk, price, plan.dist, lots);
+  const gain = moneyFor(mk, price, plan.reward, lots);
   const avg = r.record.n ? r.record.avg * loss.v : 0;
-  box.querySelector("[data-sim=out]").innerHTML = `<div><dt>Objectif atteint</dt><dd class="g">${moneyText(gain.v, gain.ccy)}</dd></div><div><dt>Stop touché</dt><dd class="l">${moneyText(-loss.v, loss.ccy)}</dd></div><div><dt>En moyenne</dt><dd>${r.record.n ? moneyText(avg, loss.ccy) : "—"}</dd></div>`;
+  box.querySelector("[data-sim=out]").innerHTML = `<div><dt>Objectif atteint</dt><dd class="g">${moneyText(gain.v, gain.ccy)}</dd></div><div><dt>Protection touchée</dt><dd class="l">${moneyText(-loss.v, loss.ccy)}</dd></div><div><dt>En moyenne</dt><dd>${r.record.n ? moneyText(avg, loss.ccy) : "—"}</dd></div>`;
   const metal = mk.cls === "gold" || /^frxX(AU|AG|PD|PT)/.test(mk.id);
   const unit = metal
     ? `1,00 $ de cours = ${num(spec.contract, 0)} $ pour 1 lot`
