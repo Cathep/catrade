@@ -278,6 +278,21 @@
   font-size: 0.82rem;
 }
 
+.alertbox {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 0.8rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.alertbox p {
+  margin: 0;
+  flex: 1 1 16rem;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
 .status {
   margin: 0.75rem 0 0;
   font-size: 0.875rem;

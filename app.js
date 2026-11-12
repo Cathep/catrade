@@ -273,13 +273,16 @@ async function scan() {
 function notify() {
   if (!store.get("ct.notif", false) || !("Notification" in window) || Notification.permission !== "granted") return;
   const seen = store.get("ct.seen", {});
+  const spec = styleById(styleId);
   for (const r of reports) {
     if (!r.pattern) continue;
     const key = `${r.id}:${r.pattern.key}`;
     if (seen[key]) continue;
     seen[key] = 1;
     const mk = MARKETS.find((m) => m.id === r.id);
-    try { new Notification(`CATRADE : ${r.pattern.side} sur ${mk.sym}`, { body: r.reason, tag: key }); } catch (e) {}
+    const sens = r.dir < 0 ? "VENDRE" : "ACHETER";
+    const body = `${spec.label} · ${sens} · ${r.pattern.side} à juger · cou ${fmt(r.pattern.neck, mk.dp)} · 2e extrémum ${fmt(r.pattern.ext2, mk.dp)}`;
+    try { new Notification(`${mk.name}`, { body, tag: key }); } catch (e) {}
   }
   store.set("ct.seen", seen);
 }
@@ -306,12 +309,19 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.skip) choose(b.dataset.skip, "passe");
   else if (b.dataset.undo) choose(b.dataset.undo, null);
   else if (b.id === "notif") {
-    if (!("Notification" in window)) return;
+    const note = $("#notif-note");
+    if (!("Notification" in window)) {
+      if (note) note.textContent = "Ce navigateur n'accepte pas l'alerte de la page. Écran verrouillé : la veille Grok part à 8 h, 13 h et 18 h.";
+      return;
+    }
     Notification.requestPermission().then((perm) => {
       const ok = perm === "granted";
       store.set("ct.notif", ok);
       b.textContent = ok ? "Alertes actives" : "Activer les alertes";
       b.className = ok ? "btn on" : "btn";
+      if (note) note.textContent = ok
+        ? "Alertes actives. Un nouveau W ou M seulement, tant que cette page reste ouverte."
+        : "Alerte refusée. Écran verrouillé : la veille Grok part à 8 h, 13 h et 18 h.";
       if (ok) notify();
     });
   }
