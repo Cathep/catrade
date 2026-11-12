@@ -2,8 +2,20 @@ name: alertes
 
 on:
   schedule:
-    - cron: "0 */4 * * *"
+    - cron: "5,20,35,50 * * * *"
+    - cron: "10 * * * *"
+    - cron: "20 0,4,8,12,16,20 * * *"
   workflow_dispatch:
+    inputs:
+      style:
+        description: Style à lire
+        required: true
+        default: day
+        type: choice
+        options:
+          - scalping
+          - day
+          - swing
 
 permissions:
   contents: write
@@ -16,6 +28,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: choisir le style
+        run: |
+          if [ -n "${{ github.event.inputs.style }}" ]; then
+            echo "STYLE=${{ github.event.inputs.style }}" >> "$GITHUB_ENV"
+          else
+            case "${{ github.event.schedule }}" in
+              "5,20,35,50 * * * *") echo "STYLE=scalping" >> "$GITHUB_ENV" ;;
+              "10 * * * *") echo "STYLE=day" >> "$GITHUB_ENV" ;;
+              *) echo "STYLE=swing" >> "$GITHUB_ENV" ;;
+            esac
+          fi
       - run: node notify.mjs
       - name: garder les alertes déjà envoyées
         run: |

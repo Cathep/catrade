@@ -9,6 +9,9 @@ vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(new URL("./engine.js", import.meta.url), "utf8"), ctx);
 const { MARKETS, STYLES, evaluate, distText } = ctx.CT;
 
+const wanted = process.env.STYLE;
+const styles = wanted ? STYLES.filter((s) => s.id === wanted) : STYLES;
+if (!styles.length) throw new Error(`style inconnu : ${wanted}`);
 const seenPath = new URL("./notify-seen.json", import.meta.url);
 const seen = new Set(fs.existsSync(seenPath) ? JSON.parse(fs.readFileSync(seenPath, "utf8")) : []);
 
@@ -106,7 +109,7 @@ const now = Date.now() / 1000;
 let sent = 0;
 
 try {
-  for (const style of STYLES) {
+  for (const style of styles) {
     for (const mk of markets) {
       let bars = cache.get(`${mk.id}:${style.step}`);
       if (!bars) {
@@ -142,4 +145,4 @@ try {
   if (!DRY) fs.writeFileSync(seenPath, JSON.stringify([...seen], null, 2));
 }
 
-console.log(`envoyées ${sent}, mémoire ${seen.size}`);
+console.log(`${styles.map((s) => s.id).join(",")} : envoyées ${sent}, mémoire ${seen.size}`);
