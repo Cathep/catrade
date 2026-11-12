@@ -2,9 +2,7 @@ name: alertes
 
 on:
   schedule:
-    - cron: "1,16,31,46 * * * *"
-    - cron: "2 * * * *"
-    - cron: "3 0,4,8,12,16,20 * * *"
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
     inputs:
       style:
@@ -32,12 +30,6 @@ jobs:
         run: |
           if [ -n "${{ github.event.inputs.style }}" ]; then
             echo "STYLE=${{ github.event.inputs.style }}" >> "$GITHUB_ENV"
-          else
-            case "${{ github.event.schedule }}" in
-              "1,16,31,46 * * * *") echo "STYLE=scalping" >> "$GITHUB_ENV" ;;
-              "2 * * * *") echo "STYLE=day" >> "$GITHUB_ENV" ;;
-              *) echo "STYLE=swing" >> "$GITHUB_ENV" ;;
-            esac
           fi
       - run: node notify.mjs
       - name: garder les alertes déjà envoyées
