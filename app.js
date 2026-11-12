@@ -211,14 +211,33 @@ function resultOf(r, plan) {
   return { sl, tp, events };
 }
 function verdictText(plan, res) {
-  const sl = res.sl ? "SL touché" : "SL pas touché";
-  const tps = plan.tps.map((_, i) => `TP ${plan.tps.length > 1 ? i + 1 : 1} ${res.tp[i] ? "atteint" : "pas atteint"}`);
-  const same = res.events.length > 1 && res.events.every((e) => e.at === res.events[0].at);
-  if (same && res.sl && res.tp.some(Boolean)) return `${sl}. ${tps.join(". ")}. Sur la même bougie.`;
+  const name = (i) => `TP ${plan.tps.length > 1 ? i + 1 : 1}`;
   const first = res.events[0];
-  if (first && first.kind === "sl" && res.tp.some(Boolean)) return `SL touché en premier. ${tps.join(". ")}.`;
-  if (first && first.kind === "tp" && res.sl) return `${tps.join(". ")} en premier. SL touché ensuite.`;
-  return `${sl}. ${tps.join(". ")}.`;
+  if (!first) return "Aucun niveau touché.";
+  const same = res.events.some((e) => e.at === first.at && e !== first);
+  if (same && res.sl && res.tp.some(Boolean)) return "SL et TP touchés sur la même bougie. On ne sait pas lequel en premier.";
+  if (first.kind === "sl") {
+    const later = [];
+    res.tp.forEach((hit, i) => { if (hit) later.push(name(i)); });
+    return later.length
+      ? `SL touché en premier. ${later.join(" et ")} vu après : ça ne compte pas.`
+      : `SL touché. ${plan.tps.map((_, i) => `${name(i)} pas atteint`).join(". ")}.`;
+  }
+  return res.sl
+    ? `${name(first.i)} atteint en premier. Le SL est arrivé après : ça ne compte pas.`
+    : `${name(first.i)} atteint. SL pas touché.`;
+}
+function slWord(res) {
+  const first = res.events[0];
+  if (!res.sl) return "pas touché";
+  if (!first || first.kind === "sl") return "touché";
+  return "après, pas pris";
+}
+function tpWord(res, i) {
+  const first = res.events[0];
+  if (!res.tp[i]) return "pas atteint";
+  if (first && first.kind === "sl" && first.at !== (res.events.find((e) => e.kind === "tp" && e.i === i) || {}).at) return "après, pas pris";
+  return "atteint";
 }
 function tpTitle(t, i, n) {
   const name = `TP ${n > 1 ? i + 1 : 1}`;
@@ -352,19 +371,20 @@ function card(r, i) {
   const finished = plan && (plan.status === "objectif" || plan.status === "stop" || (res && res.sl && res.tp.every(Boolean)));
   const hitN = res ? res.tp.filter(Boolean).length : 0;
   const closed = finished || (plan && plan.status === "partiel");
-  const kind = !r.pattern ? "W/M non détecté" : res && res.sl && res.tp.some(Boolean) ? "SL et TP" : res && res.sl && plan.status === "stop" ? "SL touché" : res && res.tp.some(Boolean) && !res.sl ? "TP atteint" : plan && plan.status === "partiel" ? `TP ${hitN} atteint` : r.pattern.slow && r.pattern.secondPart && r.pattern.reintegrated && !r.pattern.tooFar ? `${r.pattern.side} à juger` : `${r.pattern.side} possible`;
+  const first = res && res.events[0];
+  const kind = !r.pattern ? "W/M non détecté" : first && first.kind === "sl" && closed ? "SL touché" : first && first.kind === "tp" && closed ? "TP atteint" : plan && plan.status === "partiel" ? `TP ${hitN} atteint` : r.pattern.slow && r.pattern.secondPart && r.pattern.reintegrated && !r.pattern.tooFar ? `${r.pattern.side} à juger` : `${r.pattern.side} possible`;
   const kindOk = !finished && r.pattern && r.pattern.reintegrated && r.pattern.secondPart && !r.pattern.slHit;
   const move = plan && r.price != null ? r.dir * (r.price - plan.entry) : 0;
   const levels = plan ? `<dl class="lv">
       <div><dt>Entrée</dt><dd>${fmt(plan.entry, mk.dp)}</dd><span>${plan.entryKind === "cou" ? "au cou" : "au cours"}</span></div>
-      <div><dt>SL</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${closed ? (res.sl ? "touché" : "pas touché") : esc(distText(mk, plan.dist))}</span></div>
-      ${plan.tps.map((t, i) => `<div><dt>TP ${plan.tps.length > 1 ? i + 1 : 1}</dt><dd class="${res.tp[i] ? "" : "tp"}">${fmt(t.price, mk.dp)}</dd><span>${closed || res.tp[i] ? (res.tp[i] ? "atteint" : "pas atteint") : esc(distText(mk, t.reward))}</span></div>`).join("")}
+      <div><dt>SL</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${closed ? slWord(res) : esc(distText(mk, plan.dist))}</span></div>
+      ${plan.tps.map((t, i) => `<div><dt>TP ${plan.tps.length > 1 ? i + 1 : 1}</dt><dd class="${res.tp[i] && !(res.events[0] && res.events[0].kind === "sl") ? "tp" : ""}">${fmt(t.price, mk.dp)}</dd><span>${closed || res.tp[i] ? tpWord(res, i) : esc(distText(mk, t.reward))}</span></div>`).join("")}
     </dl>` + (!closed && plan.tps.length < 2 ? `<p class="taken">Un seul TP : le motif ne va pas plus loin.</p>` : "") + (closed
       ? `<p class="taken">${esc(verdictText(plan, res))}${finished ? " Ce n'est plus une nouvelle entrée." : ""}</p>`
       : plan.status === "loin"
         ? `<p class="taken">Prix trop éloigné du cou. Les niveaux restent ceux du motif, sans nouvelle entrée.</p>`
         : "") : `<p class="taken">Pas de niveaux proposés : la géométrie du motif manque.</p>`;
-  const notes = r.notes.filter((n) => !closed || !/déjà touché|mauvais côté du cou/.test(n)).slice(0, 3).map((n) => `<li>${esc(n)}</li>`).join("");
+  const notes = r.notes.filter((n) => (plan ? !/Géométrie incomplète/.test(n) : true) && (!closed || !/déjà touché|mauvais côté du cou/.test(n))).slice(0, 3).map((n) => `<li>${esc(n)}</li>`).join("");
   const past = r.record.n
     ? `${r.record.n} passages sur ~${r.days} j. Résultat moyen ${r.record.avg >= 0 ? "+" : "−"}${num(Math.abs(r.record.avg), 2)} R.`
     : "Trop peu de géométries passées pour un bilan.";
