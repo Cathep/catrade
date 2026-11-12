@@ -137,7 +137,7 @@ try {
       const sell = r.dir < 0;
       const sens = sell ? "SELL" : "BUY";
       const rang = grade(r);
-      const title = `${sens} ${rang} ${mk.name}`;
+      const title = `${rang} ${sens} ${mk.name}`;
       const tps = r.levels.tps && r.levels.tps.length ? r.levels.tps : [{ price: r.levels.tp, reward: r.levels.reward }];
       const body = [
         rang,

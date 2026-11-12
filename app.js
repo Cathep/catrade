@@ -520,6 +520,16 @@ async function scan() {
   alertLive();
 }
 
+function grade(r) {
+  const p = r.pattern;
+  const rr = r.levels?.rr || 0;
+  if (!p) return "NUL";
+  const complete = p.slow && p.secondPart && p.reintegrated && !p.tooFar && !p.slHit && !p.tpHit && !r.opposed;
+  if (complete && rr >= 2) return "MEILLEUR";
+  if (rr >= 1 && p.reintegrated && !p.tooFar && !p.slHit && !p.tpHit) return "MOYEN";
+  return "NUL";
+}
+
 function alertLive() {
   const seen = store.get("ct.ntfy", {});
   const spec = styleById(styleId);
@@ -533,8 +543,9 @@ function alertLive() {
     const mk = MARKETS.find((m) => m.id === r.id);
     const plan = planOf(r);
     const sens = r.dir < 0 ? "SELL" : "BUY";
-    const title = `${sens} ${mk.name}`;
-    const body = [sens, `${spec.label} ${spec.tf}`, `Entrée ${fmt(plan.entry, mk.dp)}`, `SL ${fmt(plan.sl, mk.dp)}`, ...plan.tps.map((t, i) => `TP ${i + 1} ${fmt(t.price, mk.dp)}`)].join("\n");
+    const rang = grade(r);
+    const title = `${rang} ${sens} ${mk.name}`;
+    const body = [rang, sens, `${spec.label} ${spec.tf}`, `Entrée ${fmt(plan.entry, mk.dp)}`, `SL ${fmt(plan.sl, mk.dp)}`, ...plan.tps.map((t, i) => `TP ${i + 1} ${fmt(t.price, mk.dp)}`)].join("\n");
     if (store.get("ct.notif", false) && "Notification" in window && Notification.permission === "granted") {
       try { new Notification(title, { body, tag: key }); } catch (e) {}
     }
