@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CATRADE</title>
+<meta name="description" content="CATRADE lit dix marchés et propose un sens à examiner, le W ou le M détecté, un stop et un objectif.">
+<meta name="theme-color" content="#0A1330">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+<div class="wrap">
+  <header class="top glass">
+    <h1 class="brand"><img src="favicon.svg" alt="" width="30" height="30" class="mark">CATRADE</h1>
+    <div class="top-r">
+      <div class="clock" id="clock"></div>
+      <button class="btn go" id="refresh" type="button">Actualiser</button>
+    </div>
+  </header>
+  <section class="hero glass" aria-live="polite">
+    <h2 id="headline">Lecture des marchés…</h2>
+    <p class="lede" id="sub">Les fiches arrivent dès que les prix sont lus.</p>
+    <div class="row">
+      <div class="seg" id="styles" role="group" aria-label="Style"></div>
+      <button class="btn on" id="manual" type="button" aria-pressed="true">W/M jugé à l'œil</button>
+    </div>
+    <p class="status" id="status">En attente des prix.</p>
+  </section>
+  <div class="grid" id="grid"></div>
+  <section class="panel glass">
+    <h3 class="sec">Les autres</h3>
+    <ul class="others" id="others"></ul>
+  </section>
+  <div class="cols">
+    <section class="panel glass">
+      <h3 class="sec">Comment s'en servir</h3>
+      <details class="fold" open>
+        <summary>Quatre gestes</summary>
+        <ol>
+          <li>Choisissez Scalping, Day ou Swing. Le motif se lit sur M15, H1 ou H4.</li>
+          <li>Une fiche Acheter ou Vendre est un sens autorisé, pas un ordre.</li>
+          <li>Trait bleu = cou, trait ambre = second extrémum. Le W ou le M se juge à l'œil.</li>
+          <li>Je prends note votre choix sur cet appareil. Rien n'est envoyé à un courtier.</li>
+        </ol>
+      </details>
+      <details class="fold">
+        <summary>Alertes dans cette page</summary>
+        <p>Une alerte part quand un nouveau W ou M apparaît, pas à chaque bougie du même motif.</p>
+        <button class="btn" id="notif" type="button">Activer les alertes</button>
+      </details>
+    </section>
+    <section class="panel glass">
+      <h3 class="sec">Le vocabulaire 4.42</h3>
+      <dl class="lex">
+        <dt>Jugement manuel</dt>
+        <dd>Réglage d'origine activé. Un W absent, trop rapide ou non réintégré n'interdit plus le sens. Buffer +2 ou −2.</dd>
+        <dt>Mode historique</dt>
+        <dd>Le W/M redevient un veto. Buffer +1 ou −1, seulement si le motif passe les anciens critères et un rapport d'au moins 2.</dd>
+        <dt>W et M</dt>
+        <dd>Double creux pour acheter, double sommet pour vendre. Deux extrêmes proches, un cou entre les deux.</dd>
+        <dt>Ce qui peut encore dire non</dt>
+        <dd>Tendance locale absente, contexte opposé, mouvement flou, week-end sur le forex et l'or, prix illisibles.</dd>
+        <dt>Ce que ce bureau ne fait pas</dt>
+        <dd>Pas MetaTrader, pas les zones, pas d'ordre, pas de T11.</dd>
+      </dl>
+    </section>
+  </div>
+  <footer class="note glass">CATRADE 4.42, lecture web. Dix marchés, prix Kraken. Le passé des fiches rejoue ces règles, frais compris, et ne promet rien. Vous décidez.</footer>
+</div>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
