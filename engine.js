@@ -393,7 +393,7 @@ var CT = (() => {
     const passed = (px) => dir > 0 ? price >= px : price <= px;
     const tps = chosen.map((t) => {
       const reward = Math.abs(t.price - entry);
-      const hit = !slHit && (passed(t.price) || p.tpHit && (dir > 0 ? t.price <= measured + 1e-9 : t.price >= measured - 1e-9));
+      const hit = passed(t.price) || p.tpHit && (dir > 0 ? t.price <= measured + 1e-9 : t.price >= measured - 1e-9);
       return { price: t.price, reward, rr: reward / dist, hit, kind: t.kind };
     });
     const last = tps[tps.length - 1];

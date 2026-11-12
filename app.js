@@ -186,6 +186,40 @@ function planOf(r) {
   }
   return null;
 }
+function resultOf(r, plan) {
+  const dir = r.dir || (plan.entry < plan.sl ? -1 : 1);
+  const start = r.pattern && Number.isFinite(r.origin) ? Math.max(0, r.pattern.i2 - r.origin) : 0;
+  const bars = (r.candles || []).slice(start);
+  let slAt = -1;
+  const tpAt = plan.tps.map(() => -1);
+  const see = (b, i) => {
+    if (slAt < 0 && (dir > 0 ? b.l <= plan.sl : b.h >= plan.sl)) slAt = i;
+    plan.tps.forEach((t, k) => {
+      if (tpAt[k] < 0 && (dir > 0 ? b.h >= t.price : b.l <= t.price)) tpAt[k] = i;
+    });
+  };
+  bars.forEach(see);
+  if (r.price != null) see({ h: r.price, l: r.price }, bars.length);
+  const sl = slAt >= 0 || !!plan.slHit;
+  const tp = plan.tps.map((t, k) => tpAt[k] >= 0 || !!t.hit);
+  if (plan.slHit && slAt < 0) slAt = bars.length + 1;
+  plan.tps.forEach((t, k) => { if (t.hit && tpAt[k] < 0) tpAt[k] = bars.length + 1; });
+  const events = [];
+  if (slAt >= 0) events.push({ kind: "sl", at: slAt });
+  tpAt.forEach((at, k) => { if (at >= 0) events.push({ kind: "tp", i: k, at }); });
+  events.sort((a, b) => a.at - b.at);
+  return { sl, tp, events };
+}
+function verdictText(plan, res) {
+  const sl = res.sl ? "SL touché" : "SL pas touché";
+  const tps = plan.tps.map((_, i) => `TP ${plan.tps.length > 1 ? i + 1 : 1} ${res.tp[i] ? "atteint" : "pas atteint"}`);
+  const same = res.events.length > 1 && res.events.every((e) => e.at === res.events[0].at);
+  if (same && res.sl && res.tp.some(Boolean)) return `${sl}. ${tps.join(". ")}. Sur la même bougie.`;
+  const first = res.events[0];
+  if (first && first.kind === "sl" && res.tp.some(Boolean)) return `SL touché en premier. ${tps.join(". ")}.`;
+  if (first && first.kind === "tp" && res.sl) return `${tps.join(". ")} en premier. SL touché ensuite.`;
+  return `${sl}. ${tps.join(". ")}.`;
+}
 function tpTitle(t, i, n) {
   const name = `TP ${n > 1 ? i + 1 : 1}`;
   return t.hit ? `${name} atteint` : name;
@@ -314,25 +348,23 @@ function card(r, i) {
   const ringc = r.record.n < 8 ? "var(--color-muted)" : w >= 45 ? "var(--color-buy)" : "var(--color-warn)";
   const ch = choiceFor(r);
   const plan = planOf(r);
-  const finished = plan && (plan.status === "objectif" || plan.status === "stop");
-  const hitN = plan ? plan.tps.filter((t) => t.hit).length : 0;
-  const kind = !r.pattern ? "W/M non détecté" : plan && plan.status === "objectif" ? "TP atteint" : plan && plan.status === "stop" ? "SL touché" : plan && plan.status === "partiel" ? `TP ${hitN} atteint` : r.pattern.slow && r.pattern.secondPart && r.pattern.reintegrated && !r.pattern.tooFar ? `${r.pattern.side} à juger` : `${r.pattern.side} possible`;
+  const res = plan ? resultOf(r, plan) : null;
+  const finished = plan && (plan.status === "objectif" || plan.status === "stop" || (res && res.sl && res.tp.every(Boolean)));
+  const hitN = res ? res.tp.filter(Boolean).length : 0;
+  const closed = finished || (plan && plan.status === "partiel");
+  const kind = !r.pattern ? "W/M non détecté" : res && res.sl && res.tp.some(Boolean) ? "SL et TP" : res && res.sl && plan.status === "stop" ? "SL touché" : res && res.tp.some(Boolean) && !res.sl ? "TP atteint" : plan && plan.status === "partiel" ? `TP ${hitN} atteint` : r.pattern.slow && r.pattern.secondPart && r.pattern.reintegrated && !r.pattern.tooFar ? `${r.pattern.side} à juger` : `${r.pattern.side} possible`;
   const kindOk = !finished && r.pattern && r.pattern.reintegrated && r.pattern.secondPart && !r.pattern.slHit;
   const move = plan && r.price != null ? r.dir * (r.price - plan.entry) : 0;
   const levels = plan ? `<dl class="lv">
       <div><dt>Entrée</dt><dd>${fmt(plan.entry, mk.dp)}</dd><span>${plan.entryKind === "cou" ? "au cou" : "au cours"}</span></div>
-      <div><dt>SL</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${esc(distText(mk, plan.dist))}</span></div>
-      ${plan.tps.map((t, i) => `<div><dt>${esc(tpTitle(t, i, plan.tps.length))}</dt><dd class="${t.hit ? "" : "tp"}">${fmt(t.price, mk.dp)}</dd><span>${esc(distText(mk, t.reward))}</span></div>`).join("")}
-    </dl>` + (plan.tps.length < 2 ? `<p class="taken">Pas de TP 2 : le motif s'arrête avant, à ${num(plan.tps[0].rr, 2)} fois le SL.</p>` : "") + (plan.status === "objectif"
-      ? `<p class="taken">Tous les TP sont atteints. Depuis l'entrée : ${move >= 0 ? "+" : "−"}${esc(distText(mk, Math.abs(move)))}. Ce n'est plus une nouvelle entrée.</p>`
-      : plan.status === "partiel"
-        ? `<p class="taken">TP ${hitN} déjà atteint. ${move >= 0 ? "+" : "−"}${esc(distText(mk, Math.abs(move)))} depuis l'entrée. Le suivant est encore devant.</p>`
-        : plan.status === "stop"
-          ? `<p class="taken">SL déjà touché. Le scénario est terminé.</p>`
-          : plan.status === "loin"
-            ? `<p class="taken">Prix trop éloigné du cou. Les niveaux restent ceux du motif, sans nouvelle entrée.</p>`
-            : "") : `<p class="taken">Pas de niveaux proposés : la géométrie du motif manque.</p>`;
-  const notes = r.notes.slice(0, 3).map((n) => `<li>${esc(n)}</li>`).join("");
+      <div><dt>SL</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${closed ? (res.sl ? "touché" : "pas touché") : esc(distText(mk, plan.dist))}</span></div>
+      ${plan.tps.map((t, i) => `<div><dt>TP ${plan.tps.length > 1 ? i + 1 : 1}</dt><dd class="${res.tp[i] ? "" : "tp"}">${fmt(t.price, mk.dp)}</dd><span>${closed || res.tp[i] ? (res.tp[i] ? "atteint" : "pas atteint") : esc(distText(mk, t.reward))}</span></div>`).join("")}
+    </dl>` + (!closed && plan.tps.length < 2 ? `<p class="taken">Un seul TP : le motif ne va pas plus loin.</p>` : "") + (closed
+      ? `<p class="taken">${esc(verdictText(plan, res))}${finished ? " Ce n'est plus une nouvelle entrée." : ""}</p>`
+      : plan.status === "loin"
+        ? `<p class="taken">Prix trop éloigné du cou. Les niveaux restent ceux du motif, sans nouvelle entrée.</p>`
+        : "") : `<p class="taken">Pas de niveaux proposés : la géométrie du motif manque.</p>`;
+  const notes = r.notes.filter((n) => !closed || !/déjà touché|mauvais côté du cou/.test(n)).slice(0, 3).map((n) => `<li>${esc(n)}</li>`).join("");
   const past = r.record.n
     ? `${r.record.n} passages sur ~${r.days} j. Résultat moyen ${r.record.avg >= 0 ? "+" : "−"}${num(Math.abs(r.record.avg), 2)} R.`
     : "Trop peu de géométries passées pour un bilan.";
@@ -358,7 +390,7 @@ function card(r, i) {
     <div class="head"><div><p class="name">${esc(mk.name)}${mk.aka ? `<span class="buf">${esc(mk.aka)}</span>` : ""}<span class="buf">${esc(r.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div>
       <div class="ring" style="--p:${r.record.n ? Math.round(w) : 0};--ringc:${ringc}" role="img" aria-label="${r.record.n ? Math.round(w) + " % de cas gagnants" : "Peu de cas"}"><b>${r.record.n ? Math.round(w) + " %" : "—"}<small>${r.record.n ? "gagnants" : "peu de cas"}</small></b></div>
     </div>
-    <div><span class="call">${finished ? (sell ? "Vente terminée" : "Achat terminé") : sell ? "Vendre" : "Acheter"}</span><span class="${kindOk ? "kind ok" : "kind"}">${esc(kind)}</span><span class="buf">buffer ${r.buffer > 0 ? "+" + r.buffer : r.buffer}</span><span class="subcall">${finished ? "Le mouvement a déjà touché son niveau. Aucun ordre n'est envoyé." : r.manual ? "Sens à examiner, pas une entrée automatique." : "Mode historique : le motif filtre le sens."}</span></div>
+    <div><span class="call">${finished ? (sell ? "Vente terminée" : "Achat terminé") : sell ? "Vendre" : "Acheter"}</span><span class="${kindOk ? "kind ok" : "kind"}">${esc(kind)}</span><span class="buf">buffer ${r.buffer > 0 ? "+" + r.buffer : r.buffer}</span><span class="subcall">${closed && res ? esc(verdictText(plan, res)) : r.manual ? "Sens à examiner, pas une entrée automatique." : "Mode historique : le motif filtre le sens."}</span></div>
     ${chart(r)}
     ${levels}
     <div class="risk" data-r="${rk}"><b class="lvl">${rl}</b><ul><li>${esc(r.reason)}</li>${notes}<li>${esc(past)}</li></ul></div>
