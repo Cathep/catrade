@@ -321,7 +321,7 @@ function card(r, i) {
   const move = plan && r.price != null ? r.dir * (r.price - plan.entry) : 0;
   const levels = plan ? `<dl class="lv">
       <div><dt>Entrée</dt><dd>${fmt(plan.entry, mk.dp)}</dd><span>${plan.entryKind === "cou" ? "au cou" : "au cours"}</span></div>
-      <div><dt>SL</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>protection · ${esc(distText(mk, plan.dist))}</span></div>
+      <div><dt>SL</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${esc(distText(mk, plan.dist))}</span></div>
       ${plan.tps.map((t, i) => `<div><dt>${esc(tpTitle(t, i, plan.tps.length))}</dt><dd class="${t.hit ? "" : "tp"}">${fmt(t.price, mk.dp)}</dd><span>${esc(distText(mk, t.reward))}</span></div>`).join("")}
     </dl>` + (plan.tps.length < 2 ? `<p class="taken">Pas de TP 2 : le motif s'arrête avant, à ${num(plan.tps[0].rr, 2)} fois le SL.</p>` : "") + (plan.status === "objectif"
       ? `<p class="taken">Tous les TP sont atteints. Depuis l'entrée : ${move >= 0 ? "+" : "−"}${esc(distText(mk, Math.abs(move)))}. Ce n'est plus une nouvelle entrée.</p>`
