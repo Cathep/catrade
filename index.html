@@ -48,9 +48,18 @@
           <li>Je prends note votre choix sur cet appareil. Rien n'est envoyé à un courtier.</li>
         </ol>
       </details>
+      <details class="fold" open>
+        <summary>Pour que ça tourne sans cette page</summary>
+        <ol>
+          <li>Téléphone, écran verrouillé : TradingView. Colle le script Pine du ZIP, ajoute-le au graphique, active l'alerte. C'est le serveur TradingView qui prévient, pas cette page.</li>
+          <li>Zones et bandes T11 : MetaTrader 5. Copie le dossier MT5/MQL5 du ZIP, compile l'indicateur puis le robot, laisse-les sur le graphique.</li>
+          <li>L'ordre : le mode d'origine ne l'envoie pas, même si TradeAuto est vrai. Tu le places chez le courtier. Laisse TradeAuto sur false.</li>
+          <li>Pour que le terminal reste allumé quand l'ordinateur est éteint, il lui faut un VPS. Cette page ne devient pas le courtier.</li>
+        </ol>
+      </details>
       <details class="fold">
         <summary>Alertes dans cette page</summary>
-        <p>Une alerte part quand un nouveau W ou M apparaît, pas à chaque bougie du même motif.</p>
+        <p>Une alerte part quand un nouveau W ou M apparaît, pas à chaque bougie du même motif. Elles s'arrêtent si tu fermes l'onglet.</p>
         <button class="btn" id="notif" type="button">Activer les alertes</button>
       </details>
     </section>
@@ -65,8 +74,8 @@
         <dd>Double creux pour acheter, double sommet pour vendre. Deux extrêmes proches, un cou entre les deux.</dd>
         <dt>Ce qui peut encore dire non</dt>
         <dd>Tendance locale absente, contexte opposé, mouvement flou, week-end sur le forex et l'or, prix illisibles.</dd>
-        <dt>Ce que ce bureau ne fait pas</dt>
-        <dd>Pas MetaTrader, pas les zones, pas d'ordre, pas de T11.</dd>
+        <dt>Zones, ordre et T11</dt>
+        <dd>Ils vivent dans MetaTrader, pas dans cette page. En jugement manuel, l'expert 4.42 non plus n'envoie aucun ordre W/M et ne déplace pas T11. Les zones et les bandes T11 se dessinent sur le graphique du terminal. L'ordre, tu le passes toi-même avec les niveaux de la fiche.</dd>
       </dl>
     </section>
   </div>
