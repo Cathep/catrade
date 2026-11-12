@@ -69,16 +69,16 @@ var CT = (() => {
     }
   ];
   var MARKETS = [
-    { id: "EURUSD", sym: "EUR/USD", name: "EUR/USD", cls: "fx", pip: 1e-4, dp: 5, cost: 12e-5 },
-    { id: "GBPUSD", sym: "GBP/USD", name: "GBP/USD", cls: "fx", pip: 1e-4, dp: 5, cost: 15e-5 },
-    { id: "AUDUSD", sym: "AUD/USD", name: "AUD/USD", cls: "fx", pip: 1e-4, dp: 5, cost: 18e-5 },
-    { id: "USDCAD", sym: "USD/CAD", name: "USD/CAD", cls: "fx", pip: 1e-4, dp: 5, cost: 18e-5 },
-    { id: "USDCHF", sym: "USD/CHF", name: "USD/CHF", cls: "fx", pip: 1e-4, dp: 5, cost: 18e-5 },
-    { id: "EURGBP", sym: "EUR/GBP", name: "EUR/GBP", cls: "fx", pip: 1e-4, dp: 5, cost: 18e-5 },
-    { id: "PAXGUSD", sym: "XAU/USD", name: "Or, XAU/USD", cls: "gold", dp: 2, cost: 15e-5 },
-    { id: "XBTUSD", sym: "BTC/USD", name: "Bitcoin, BTC/USD", cls: "crypto", dp: 0, cost: 4e-4 },
-    { id: "ETHUSD", sym: "ETH/USD", name: "Ethereum, ETH/USD", cls: "crypto", dp: 2, cost: 4e-4 },
-    { id: "SOLUSD", sym: "SOL/USD", name: "Solana, SOL/USD", cls: "crypto", dp: 2, cost: 5e-4 }
+    { id: "R_10", sym: "V10", name: "Volatility 10", aka: "FX Vol 20", cls: "synth", dp: 3, cost: 8e-5 },
+    { id: "R_25", sym: "V25", name: "Volatility 25", aka: "FX Vol 40", cls: "synth", dp: 3, cost: 8e-5 },
+    { id: "R_50", sym: "V50", name: "Volatility 50", aka: "FX Vol 60", cls: "synth", dp: 4, cost: 8e-5 },
+    { id: "R_75", sym: "V75", name: "Volatility 75", aka: "FX Vol 80", cls: "synth", dp: 4, cost: 8e-5 },
+    { id: "R_100", sym: "V100", name: "Volatility 100", aka: "FX Vol 99", cls: "synth", dp: 2, cost: 8e-5 },
+    { id: "1HZ15V", sym: "V15 1s", name: "Volatility 15 (1s)", cls: "synth", dp: 3, cost: 8e-5 },
+    { id: "1HZ25V", sym: "V25 1s", name: "Volatility 25 (1s)", cls: "synth", dp: 2, cost: 8e-5 },
+    { id: "1HZ50V", sym: "V50 1s", name: "Volatility 50 (1s)", cls: "synth", dp: 2, cost: 8e-5 },
+    { id: "1HZ75V", sym: "V75 1s", name: "Volatility 75 (1s)", cls: "synth", dp: 2, cost: 8e-5 },
+    { id: "1HZ100V", sym: "V100 1s", name: "Volatility 100 (1s)", cls: "synth", dp: 2, cost: 8e-5 }
   ];
   function styleById(id) {
     return STYLES.find((s) => s.id === id) ?? STYLES[1];
@@ -455,7 +455,7 @@ var CT = (() => {
       return { ...base, why: "historique", price: last.c, reason: "Historique trop court sur cette unit\xE9 de temps." };
     }
     const price = last.c;
-    const weekend = mk.cls !== "crypto";
+    const weekend = mk.cls === "fx" || mk.cls === "gold";
     const P = prepare(closed, style);
     const i = closed.length - 1;
     const record = backtest(P, style, manual, mk, weekend);
@@ -505,7 +505,8 @@ var CT = (() => {
   }
   function distText(mk, d) {
     if (mk.pip) return `${Math.round(d / mk.pip)} pips`;
-    return `${d.toLocaleString("fr-FR", { maximumFractionDigits: mk.dp })} $`;
+    const n = d.toLocaleString("fr-FR", { maximumFractionDigits: mk.dp });
+    return mk.cls === "synth" ? `${n} pts` : `${n} $`;
   }
   function lotLoss(mk, price, dist, quoteUsd) {
     if (mk.cls === "gold") return dist;

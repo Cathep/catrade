@@ -34,20 +34,29 @@ function tick() {
   $("#clock").innerHTML = `${hm(n)}<br>${esc(new Date(n).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}`;
 }
 
-async function fetchOHLC(pair, interval) {
+async function fetchOHLC(symbol, granularity) {
   for (let attempt = 1; ; attempt++) {
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), 12000);
     try {
-      const r = await fetch(`https://api.kraken.com/0/public/OHLC?pair=${pair}&interval=${interval}`, { cache: "no-store", signal: ac.signal });
-      const j = await r.json();
-      if (j.error && j.error.length) throw new Error(j.error.join(", "));
-      const key = Object.keys(j.result).find((k) => k !== "last");
-      return j.result[key].map((x) => ({ t: +x[0], o: +x[1], h: +x[2], l: +x[3], c: +x[4] }));
+      return await new Promise((resolve, reject) => {
+        const ws = new WebSocket("wss://api.derivws.com/trading/v1/options/ws/public");
+        const timer = setTimeout(() => { ws.close(); reject(new Error("délai")); }, 12000);
+        ws.onopen = () => ws.send(JSON.stringify({
+          ticks_history: symbol, adjust_start_time: 1, count: 500, end: "latest", start: 1, style: "candles", granularity,
+        }));
+        ws.onmessage = (ev) => {
+          const j = JSON.parse(ev.data);
+          if (j.error) { clearTimeout(timer); ws.close(); reject(new Error(j.error.message || "Deriv")); return; }
+          if (j.msg_type === "candles" && j.candles && j.candles.length) {
+            clearTimeout(timer); ws.close();
+            resolve(j.candles.map((c) => ({ t: c.epoch, o: +c.open, h: +c.high, l: +c.low, c: +c.close })));
+          }
+        };
+        ws.onerror = () => { clearTimeout(timer); reject(new Error("websocket")); };
+      });
     } catch (e) {
       if (attempt >= 3) throw e;
       await sleep(800 * attempt);
-    } finally { clearTimeout(timer); }
+    }
   }
 }
 
@@ -140,7 +149,7 @@ function card(r, i) {
       ? `<p class="taken">Vous avez passé ce cas.</p><div class="choice"><button class="btn" type="button" data-undo="${esc(r.id)}">Revoir</button></div>`
       : `<div class="choice"><button class="btn go" type="button" data-take="${esc(r.id)}">Je prends</button><button class="btn" type="button" data-skip="${esc(r.id)}">Je passe</button></div>`;
   return `<article class="card glass rise" data-dir="${r.dir}" data-choice="${ch ? ch.c : ""}" style="--i:${i}">
-    <div class="head"><div><p class="name">${esc(mk.name)}<span class="buf">${esc(r.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div>
+    <div class="head"><div><p class="name">${esc(mk.name)}${mk.aka ? `<span class="buf">${esc(mk.aka)}</span>` : ""}<span class="buf">${esc(r.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div>
       <div class="ring" style="--p:${r.record.n ? Math.round(w) : 0};--ringc:${ringc}" role="img" aria-label="${r.record.n ? Math.round(w) + " % de cas gagnants" : "Peu de cas"}"><b>${r.record.n ? Math.round(w) + " %" : "—"}<small>${r.record.n ? "gagnants" : "peu de cas"}</small></b></div>
     </div>
     <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="${kindOk ? "kind ok" : "kind"}">${esc(kind)}</span><span class="buf">buffer ${r.buffer > 0 ? "+" + r.buffer : r.buffer}</span><span class="subcall">${r.manual ? "Sens à examiner, pas une entrée automatique." : "Mode historique : le motif filtre le sens."}</span></div>
@@ -165,10 +174,10 @@ function simulate(box) {
     lossV = amt; gain = amt * (pl.reward / pl.dist);
     note = `La taille est calculée pour perdre ${num(amt, 2)} $ au stop.`;
   } else {
-    const lev = mode === "lev" ? (mk.cls === "crypto" ? 5 : 30) : 1;
+    const lev = mode === "lev" ? (mk.cls === "fx" ? 30 : mk.cls === "gold" ? 20 : 1) : 1;
     const units = (amt * lev) / pl.entry;
     lossV = units * pl.dist; gain = units * pl.reward;
-    note = mode === "lev" ? `Levier indicatif ${mk.cls === "crypto" ? "×5" : "×30"}.` : `${units.toLocaleString("fr-FR", { maximumSignificantDigits: 3 })} unités.`;
+    note = mode === "lev" ? `Levier indicatif ${mk.cls === "fx" ? "×30" : mk.cls === "gold" ? "×20" : "aucun : c'est un indice"}.` : `${units.toLocaleString("fr-FR", { maximumSignificantDigits: 3 })} unités.`;
   }
   const avg = r.record.n ? r.record.avg * lossV : 0;
   const sg = (x) => `${x >= 0 ? "+" : "−"}${num(Math.abs(x), 2)} $`;
@@ -214,7 +223,7 @@ async function scan() {
     while (cursor < MARKETS.length) {
       const i = cursor++;
       const mk = MARKETS[i];
-      try { out[i] = evaluate(mk, await fetchOHLC(mk.id, spec.interval), Date.now() / 1000, spec, manual); }
+      try { out[i] = evaluate(mk, await fetchOHLC(mk.id, spec.step), Date.now() / 1000, spec, manual); }
       catch (e) { out[i] = evaluate(mk, null, Date.now() / 1000, spec, manual); }
       done++;
       if (token === gen) $("#status").textContent = `Lecture des prix : ${done} sur ${MARKETS.length}`;
@@ -228,7 +237,7 @@ async function scan() {
   btn.disabled = false;
   btn.textContent = "Actualiser";
   const failed = reports.filter((r) => r.state === "erreur").length;
-  $("#status").textContent = failed === MARKETS.length ? "Aucun prix reçu. Kraken ne répond pas." : `Prix lus à ${hm(scannedAt)} sur Kraken, en ${spec.tf}. Actualisez avant d'entrer.`;
+  $("#status").textContent = failed === MARKETS.length ? "Aucun prix reçu. Deriv ne répond pas." : `Prix Deriv à ${hm(scannedAt)}, en ${spec.tf}. Le nom FX Vol est celui de Weltrade : le cours n'est pas le même.`;
   render(true);
   notify();
 }
