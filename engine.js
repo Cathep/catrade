@@ -27,6 +27,7 @@ var CT = (() => {
     evaluate: () => evaluate,
     fxBlocked: () => fxBlocked,
     lotLoss: () => lotLoss,
+    patternPlan: () => patternPlan,
     proposeLevels: () => proposeLevels,
     styleById: () => styleById
   });
@@ -351,24 +352,77 @@ var CT = (() => {
     }
     return null;
   }
-  function proposeLevels(price, p, atr) {
-    if (!(atr > 0) || p.slHit || p.tpHit) return null;
+  function ahead(dir, entry, px, gap) {
+    return dir > 0 ? px > entry + gap : px < entry - gap;
+  }
+  function patternPlan(price, p, atr) {
+    if (!(atr > 0) || !(price > 0)) return null;
+    const dir = p.dir;
     const pad = 0.12 * atr;
-    const sl = p.dir > 0 ? Math.min(p.ext1, p.ext2) - pad : Math.max(p.ext1, p.ext2) + pad;
-    const tp = p.dir > 0 ? p.neck + p.height : p.neck - p.height;
-    const between = p.dir > 0 ? price > sl && price < tp : price < sl && price > tp;
+    const sl = dir > 0 ? Math.min(p.ext1, p.ext2) - pad : Math.max(p.ext1, p.ext2) + pad;
+    const measured = dir > 0 ? p.neck + p.height : p.neck - p.height;
+    const neck = p.neck;
+    const measuredOk = dir > 0 ? measured > sl : measured < sl;
+    if (!measuredOk || !Number.isFinite(measured) || !Number.isFinite(neck)) return null;
+    const neckInFront = dir > 0 ? neck > sl && neck < measured : neck < sl && neck > measured;
+    const beforeNeck = dir > 0 ? price > sl && price < neck : price < sl && price > neck;
     let entry = price;
     let entryKind = "cours";
-    if (!between) {
-      const neckOk = p.dir > 0 ? p.neck > sl && p.neck < tp && price <= p.neck && price > sl : p.neck < sl && p.neck > tp && price >= p.neck && price < sl;
-      if (!neckOk) return null;
-      entry = p.neck;
+    if (beforeNeck) {
+      entry = price;
+      entryKind = "cours";
+    } else if (neckInFront) {
+      entry = neck;
       entryKind = "cou";
-    }
+    } else return null;
     const dist = Math.abs(entry - sl);
-    const reward = Math.abs(tp - entry);
-    if (!(dist > 0) || !(reward > 0)) return null;
-    return { entry, sl, tp, dist, reward, rr: reward / dist, entryKind };
+    if (!(dist > 0)) return null;
+    const gap = dist * 0.35;
+    const structural = [];
+    if (neckInFront && ahead(dir, entry, neck, gap * 0.15)) structural.push({ price: neck, kind: "cou" });
+    if (ahead(dir, entry, measured, gap * 0.15)) structural.push({ price: measured, kind: "mesure" });
+    if (!structural.length) return null;
+    const far = structural.reduce((a, b) => dir > 0 ? a.price > b.price ? a : b : a.price < b.price ? a : b);
+    const two = dir > 0 ? entry + 2 * dist : entry - 2 * dist;
+    const twoInside = dir > 0 ? two < far.price - gap : two > far.price + gap;
+    const twoClear = structural.every((s) => Math.abs(s.price - two) >= gap);
+    const chosen = structural.slice();
+    if (entryKind === "cou" && twoInside && twoClear) chosen.push({ price: two, kind: "2r" });
+    chosen.sort((a, b) => dir * (a.price - b.price));
+    const slHit = p.slHit || (dir > 0 ? price <= sl : price >= sl);
+    const passed = (px) => dir > 0 ? price >= px : price <= px;
+    const tps = chosen.map((t) => {
+      const reward = Math.abs(t.price - entry);
+      const hit = !slHit && (passed(t.price) || p.tpHit && (dir > 0 ? t.price <= measured + 1e-9 : t.price >= measured - 1e-9));
+      return { price: t.price, reward, rr: reward / dist, hit, kind: t.kind };
+    });
+    const last = tps[tps.length - 1];
+    return {
+      entry,
+      sl,
+      tp: last.price,
+      dist,
+      reward: last.reward,
+      rr: last.rr,
+      entryKind,
+      tps,
+      slHit,
+      done: slHit || tps.every((t) => t.hit)
+    };
+  }
+  function proposeLevels(price, p, atr) {
+    const plan = patternPlan(price, p, atr);
+    if (!plan || plan.slHit || plan.done) return null;
+    return {
+      entry: plan.entry,
+      sl: plan.sl,
+      tp: plan.tp,
+      dist: plan.dist,
+      reward: plan.reward,
+      rr: plan.rr,
+      entryKind: plan.entryKind,
+      tps: plan.tps
+    };
   }
   function judgeAt(P, i, style, manual, price) {
     const atr = P.atr[i];

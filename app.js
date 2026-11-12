@@ -170,18 +170,30 @@ function moneyFor(mk, price, dist, lots) {
 }
 function planOf(r) {
   if (!r) return null;
-  if (r.levels) return Object.assign({}, r.levels, { status: "ouvert" });
-  const p = r.pattern;
-  if (!p || !(r.atr > 0)) return null;
-  const pad = 0.12 * r.atr;
-  const sl = p.dir > 0 ? Math.min(p.ext1, p.ext2) - pad : Math.max(p.ext1, p.ext2) + pad;
-  const tp = p.dir > 0 ? p.neck + p.height : p.neck - p.height;
-  const entry = p.neck;
-  const dist = Math.abs(entry - sl);
-  const reward = Math.abs(tp - entry);
-  if (!(dist > 0) || !(reward > 0)) return null;
-  const status = p.slHit ? "stop" : p.tpHit || p.burnt ? "objectif" : p.tooFar ? "loin" : "trace";
-  return { entry, sl, tp, dist, reward, rr: reward / dist, entryKind: "cou", status };
+  if (r.pattern && r.atr > 0 && typeof CT.patternPlan === "function") {
+    const price = r.price != null ? r.price : r.pattern.neck;
+    const plan = CT.patternPlan(price, r.pattern, r.atr);
+    if (plan) {
+      const last = plan.tps[plan.tps.length - 1];
+      const some = plan.tps.some((t) => t.hit);
+      const status = plan.slHit ? "stop" : last && last.hit ? "objectif" : some ? "partiel" : r.pattern.tooFar && !r.levels ? "loin" : "ouvert";
+      return Object.assign({}, plan, { status });
+    }
+  }
+  if (r.levels) {
+    const tps = r.levels.tps && r.levels.tps.length ? r.levels.tps : [{ price: r.levels.tp, reward: r.levels.reward, rr: r.levels.rr, hit: false, kind: "mesure" }];
+    return Object.assign({}, r.levels, { tps, status: "ouvert" });
+  }
+  return null;
+}
+function tpTitle(t, i, n) {
+  const name = n > 1 ? `Objectif ${i + 1}` : "Objectif";
+  return t.hit ? `${name} atteint` : name;
+}
+function tpHint(t) {
+  if (t.kind === "cou") return "le cou";
+  if (t.kind === "2r") return "2 fois la protection";
+  return "hauteur du motif";
 }
 function moneyText(x, ccy) {
   const sign = x >= 0 ? "+" : "−";
@@ -270,9 +282,10 @@ function chart(r) {
   const bars = r.candles;
   if (!bars || bars.length < 2 || r.price == null) return "";
   const W = 300, H = 92;
-  const tpP = r.pattern ? (r.pattern.dir > 0 ? r.pattern.neck + r.pattern.height : r.pattern.neck - r.pattern.height) : null;
-  const hi = Math.max(...bars.map((b) => b.h), r.pattern ? r.pattern.neck : -Infinity, tpP ?? -Infinity);
-  const lo = Math.min(...bars.map((b) => b.l), r.pattern ? Math.min(r.pattern.ext1, r.pattern.ext2) : Infinity, tpP ?? Infinity);
+  const plan = planOf(r);
+  const marks = plan ? plan.tps.map((t) => t.price) : [];
+  const hi = Math.max(...bars.map((b) => b.h), r.pattern ? r.pattern.neck : -Infinity, ...(marks.length ? marks : [-Infinity]));
+  const lo = Math.min(...bars.map((b) => b.l), r.pattern ? Math.min(r.pattern.ext1, r.pattern.ext2) : Infinity, ...(marks.length ? marks : [Infinity]));
   const span = hi - lo || 1;
   const x = (i) => (i / (bars.length - 1)) * W;
   const y = (p) => 6 + ((hi - p) / span) * (H - 14);
@@ -287,7 +300,8 @@ function chart(r) {
   if (r.pattern) {
     const neck = y(r.pattern.neck);
     const extP = r.pattern.dir > 0 ? Math.min(r.pattern.ext1, r.pattern.ext2) : Math.max(r.pattern.ext1, r.pattern.ext2);
-    guides = `<line x1="0" x2="${W}" y1="${neck}" y2="${neck}" stroke="var(--color-focus)" stroke-dasharray="4 3" stroke-width="1"/><line x1="0" x2="${W}" y1="${y(extP)}" y2="${y(extP)}" stroke="var(--color-warn)" stroke-dasharray="2 3" stroke-width="1"/><line x1="0" x2="${W}" y1="${y(tpP)}" y2="${y(tpP)}" stroke="var(--color-buy)" stroke-dasharray="4 3" stroke-width="1"/>`;
+    const targets = plan ? plan.tps.map((t) => `<line x1="0" x2="${W}" y1="${y(t.price)}" y2="${y(t.price)}" stroke="${t.hit ? "var(--color-muted)" : "var(--color-buy)"}" stroke-dasharray="4 3" stroke-width="1"/>`).join("") : "";
+    guides = `<line x1="0" x2="${W}" y1="${neck}" y2="${neck}" stroke="var(--color-focus)" stroke-dasharray="4 3" stroke-width="1"/><line x1="0" x2="${W}" y1="${y(extP)}" y2="${y(extP)}" stroke="var(--color-warn)" stroke-dasharray="2 3" stroke-width="1"/>${targets}`;
   }
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Dernières bougies">${bodies}${guides}</svg>`;
 }
@@ -301,23 +315,26 @@ function card(r, i) {
   const ch = choiceFor(r);
   const plan = planOf(r);
   const finished = plan && (plan.status === "objectif" || plan.status === "stop");
-  const kind = !r.pattern ? "W/M non détecté" : plan && plan.status === "objectif" ? "Objectif atteint" : plan && plan.status === "stop" ? "Protection touchée" : r.pattern.slow && r.pattern.secondPart && r.pattern.reintegrated && !r.pattern.tooFar ? `${r.pattern.side} à juger` : `${r.pattern.side} possible`;
+  const hitN = plan ? plan.tps.filter((t) => t.hit).length : 0;
+  const kind = !r.pattern ? "W/M non détecté" : plan && plan.status === "objectif" ? "Objectif atteint" : plan && plan.status === "stop" ? "Protection touchée" : plan && plan.status === "partiel" ? `Objectif ${hitN} atteint` : r.pattern.slow && r.pattern.secondPart && r.pattern.reintegrated && !r.pattern.tooFar ? `${r.pattern.side} à juger` : `${r.pattern.side} possible`;
   const kindOk = !finished && r.pattern && r.pattern.reintegrated && r.pattern.secondPart && !r.pattern.slHit;
   const move = plan && r.price != null ? r.dir * (r.price - plan.entry) : 0;
   const levels = plan ? `<dl class="lv">
       <div><dt>${plan.entryKind === "cou" ? "Entrée au cou" : "Entrée"}</dt><dd>${fmt(plan.entry, mk.dp)}</dd></div>
       <div><dt>Protection</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${esc(distText(mk, plan.dist))}</span></div>
-      <div><dt>Objectif</dt><dd class="tp">${fmt(plan.tp, mk.dp)}</dd><span>${esc(distText(mk, plan.reward))} · ${num(plan.rr, 2)} R</span></div>
+      ${plan.tps.map((t, i) => `<div><dt>${esc(tpTitle(t, i, plan.tps.length))}</dt><dd class="${t.hit ? "" : "tp"}">${fmt(t.price, mk.dp)}</dd><span>${esc(distText(mk, t.reward))} · ${num(t.rr, 2)} R · ${esc(tpHint(t))}</span></div>`).join("")}
     </dl>` + (r.pattern ? `<dl class="meta">
       <div><dt>Cou</dt><dd>${fmt(r.pattern.neck, mk.dp)}</dd><span>trait bleu</span></div>
       <div><dt>${r.pattern.side === "W" ? "2e creux" : "2e sommet"}</dt><dd>${fmt(r.pattern.ext2, mk.dp)}</dd><span>trait ambre${(() => { const m = moneyFor(mk, r.price ?? plan.entry, plan.dist, lotFor(mk)); return ` · ${num(Math.abs(m.v), 2)} ${m.ccy === "USD" ? "$" : m.ccy} pour ${num(lotFor(mk), lotDigits(specOf(mk).min))} lot`; })()}</span></div>
     </dl>` : "") + (plan.status === "objectif"
-      ? `<p class="taken">Objectif déjà atteint. Depuis l'entrée : ${move >= 0 ? "+" : "−"}${esc(distText(mk, Math.abs(move)))}. Ce n'est plus une nouvelle entrée.</p>`
-      : plan.status === "stop"
-        ? `<p class="taken">Protection déjà touchée. Le scénario est terminé.</p>`
-        : plan.status === "loin"
-          ? `<p class="taken">Prix trop éloigné du cou. Les niveaux restent ceux du motif, sans nouvelle entrée.</p>`
-          : "") : `<p class="taken">Pas de niveaux proposés : la géométrie du motif manque.</p>`;
+      ? `<p class="taken">Tous les objectifs sont atteints. Depuis l'entrée : ${move >= 0 ? "+" : "−"}${esc(distText(mk, Math.abs(move)))}. Ce n'est plus une nouvelle entrée.</p>`
+      : plan.status === "partiel"
+        ? `<p class="taken">Objectif ${hitN} déjà atteint. ${move >= 0 ? "+" : "−"}${esc(distText(mk, Math.abs(move)))} depuis l'entrée. Le suivant est encore devant.</p>`
+        : plan.status === "stop"
+          ? `<p class="taken">Protection déjà touchée. Le scénario est terminé.</p>`
+          : plan.status === "loin"
+            ? `<p class="taken">Prix trop éloigné du cou. Les niveaux restent ceux du motif, sans nouvelle entrée.</p>`
+            : "") : `<p class="taken">Pas de niveaux proposés : la géométrie du motif manque.</p>`;
   const notes = r.notes.slice(0, 3).map((n) => `<li>${esc(n)}</li>`).join("");
   const past = r.record.n
     ? `${r.record.n} passages sur ~${r.days} j. Résultat moyen ${r.record.avg >= 0 ? "+" : "−"}${num(Math.abs(r.record.avg), 2)} R.`
@@ -363,9 +380,12 @@ function simulate(box) {
   const lots = lotFor(mk);
   const price = r.price ?? plan.entry;
   const loss = moneyFor(mk, price, plan.dist, lots);
-  const gain = moneyFor(mk, price, plan.reward, lots);
+  const gains = plan.tps.map((t, i) => {
+    const g = moneyFor(mk, price, t.reward, lots);
+    return `<div><dt>${esc(tpTitle(t, i, plan.tps.length))}</dt><dd class="g">${moneyText(g.v, g.ccy)}</dd></div>`;
+  }).join("");
   const avg = r.record.n ? r.record.avg * loss.v : 0;
-  box.querySelector("[data-sim=out]").innerHTML = `<div><dt>Objectif atteint</dt><dd class="g">${moneyText(gain.v, gain.ccy)}</dd></div><div><dt>Protection touchée</dt><dd class="l">${moneyText(-loss.v, loss.ccy)}</dd></div><div><dt>En moyenne</dt><dd>${r.record.n ? moneyText(avg, loss.ccy) : "—"}</dd></div>`;
+  box.querySelector("[data-sim=out]").innerHTML = `${gains}<div><dt>Protection touchée</dt><dd class="l">${moneyText(-loss.v, loss.ccy)}</dd></div><div><dt>En moyenne</dt><dd>${r.record.n ? moneyText(avg, loss.ccy) : "—"}</dd></div>`;
   const metal = mk.cls === "gold" || /^frxX(AU|AG|PD|PT)/.test(mk.id);
   const unit = metal
     ? `1,00 $ de cours = ${num(spec.contract, 0)} $ pour 1 lot`

@@ -129,10 +129,11 @@ try {
       const sell = r.dir < 0;
       const sens = sell ? "vendre" : "acheter";
       const title = `CATRADE ${style.label} : ${sens} ${mk.name}`;
+      const tps = r.levels.tps && r.levels.tps.length ? r.levels.tps : [{ price: r.levels.tp, reward: r.levels.reward }];
       const body = [
         `Entrée ${fmt(r.levels.entry, mk.dp)}`,
-        `SL ${fmt(r.levels.sl, mk.dp)} (${distText(mk, r.levels.dist)})`,
-        `TP ${fmt(r.levels.tp, mk.dp)} (${distText(mk, r.levels.reward)})`,
+        `Protection ${fmt(r.levels.sl, mk.dp)} (${distText(mk, r.levels.dist)})`,
+        ...tps.map((t, i) => `TP${tps.length > 1 ? i + 1 : ""} ${fmt(t.price, mk.dp)} (${distText(mk, t.reward)})`),
         `${r.pattern.side} à juger. Fermer au plus tard ${deadline(now, style)}.`,
       ].join("\n");
       await publish(title, body, sell);
