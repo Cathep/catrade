@@ -92,8 +92,8 @@ async function publish(title, body, sell) {
     method: "POST",
     headers: {
       Title: title,
-      Priority: "4",
-      Tags: sell ? "chart_with_downwards_trend" : "chart_with_upwards_trend",
+      Priority: "5",
+      Tags: "rotating_light",
       Click: "https://cathep.github.io/catrade/",
     },
     body,
@@ -128,7 +128,7 @@ try {
       if (seen.has(id)) continue;
       const sell = r.dir < 0;
       const sens = sell ? "vendre" : "acheter";
-      const title = `CATRADE ${style.label} : ${sens} ${mk.name}`;
+      const title = `CATRADE ${sens.toUpperCase()} ${mk.name}`;
       const tps = r.levels.tps && r.levels.tps.length ? r.levels.tps : [{ price: r.levels.tp, reward: r.levels.reward }];
       const body = [
         `Entrée ${fmt(r.levels.entry, mk.dp)}`,

@@ -254,6 +254,16 @@ function moneyText(x, ccy) {
   return ccy === "USD" ? `${sign}${body} $` : `${sign}${body} ${ccy}`;
 }
 
+function openNow(r) {
+  if (!r || r.state !== "avis" || !r.pattern) return false;
+  const plan = planOf(r);
+  if (!plan || plan.status === "loin" || plan.status === "stop" || plan.status === "objectif") return false;
+  const res = resultOf(r, plan);
+  if (res.events[0] && res.events[0].kind === "sl") return false;
+  if (res.tp.length && res.tp[res.tp.length - 1]) return false;
+  return true;
+}
+
 function tick() {
   const n = Date.now();
   $("#clock").innerHTML = `${hm(n)}<br>${esc(new Date(n).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}`;
@@ -445,11 +455,13 @@ function simulate(box) {
 }
 
 function render(fresh) {
-  const avis = reports.filter((r) => r.state === "avis").sort((a, b) => Number(!!b.pattern) - Number(!!a.pattern) || winPct(b) - winPct(a));
+  const avis = reports.filter((r) => r.state === "avis");
+  const live = avis.filter(openNow);
+  const ordered = live.concat(avis.filter((r) => !openNow(r)));
   const rest = reports.filter((r) => r.state !== "avis");
   const grid = $("#grid");
   grid.className = fresh ? "grid fresh" : "grid";
-  grid.innerHTML = avis.length ? avis.map(card).join("") : `<div class="glass empty">${!reports.length || busy ? "Lecture en cours." : manual ? "Aucun marché ne passe les filtres encore actifs." : "Aucun motif ne passe les anciens critères."}</div>`;
+  grid.innerHTML = ordered.length ? ordered.map(card).join("") : `<div class="glass empty">${!reports.length || busy ? "Lecture en cours." : manual ? "Aucun marché ne passe les filtres encore actifs." : "Aucun motif ne passe les anciens critères."}</div>`;
   $("#others").innerHTML = rest.length ? rest.map((r) => {
     const mk = MARKETS.find((m) => m.id === r.id);
     return `<li id="m-${esc(r.id)}"><b>${esc(mk.name)}</b><b>${r.price != null ? fmt(r.price, mk.dp) : "?"}</b><span>${esc(r.reason)}</span></li>`;
@@ -460,9 +472,9 @@ function render(fresh) {
     const mk = MARKETS.find((m) => m.id === r.id);
     return `<a class="namechip${r.state === "avis" ? " on" : ""}" href="#m-${esc(r.id)}">${esc(mk.name)}</a>`;
   }).join("");
-  const withPattern = avis.filter((r) => r.pattern).length;
-  $("#headline").textContent = !reports.length ? "Lecture des marchés…" : reports.every((r) => r.state === "erreur") ? "Prix illisibles." : avis.length ? `${avis.length} marché${avis.length > 1 ? "s" : ""} à examiner.` : "Rien à proposer pour l'instant.";
-  $("#sub").textContent = !reports.length ? "Les fiches arrivent dès que les prix sont lus." : reports.every((r) => r.state === "erreur") ? "La source des prix ne répond pas. Réessayez." : manual ? `${withPattern ? withPattern + " W ou M détecté" + (withPattern > 1 ? "s" : "") + ". " : "Aucun W/M détecté. "}Le sens vient des autres filtres. La figure, c'est à vous de la juger. Aucun ordre n'est envoyé.` : "Mode historique : sans W/M lent, confirmé et réintégré, le sens reste refusé.";
+  const withPattern = ordered.filter((r) => r.pattern).length;
+  $("#headline").textContent = !reports.length ? "Lecture des marchés…" : reports.every((r) => r.state === "erreur") ? "Prix illisibles." : live.length ? `${live.length} occasion${live.length > 1 ? "s" : ""} ouverte${live.length > 1 ? "s" : ""}` : ordered.length ? "Aucune occasion encore ouverte." : "Rien à proposer pour l'instant.";
+  $("#sub").textContent = !reports.length ? "Les fiches arrivent dès que les prix sont lus." : reports.every((r) => r.state === "erreur") ? "La source des prix ne répond pas. Réessayez." : live.length ? "Elles sont en haut. L'alerte part dans ntfy tout de suite." : manual ? `${withPattern ? withPattern + " W ou M déjà terminé" + (withPattern > 1 ? "s" : "") + ". " : ""}Aucun ordre n'est envoyé.` : "Mode historique : sans W/M lent, confirmé et réintégré, le sens reste refusé.";
   document.querySelectorAll(".sim[open]").forEach(simulate);
 }
 
@@ -505,24 +517,34 @@ async function scan() {
   const failed = reports.filter((r) => r.state === "erreur").length;
   $("#status").textContent = failed === list.length ? "Aucun prix reçu. Deriv ne répond pas." : `Prix Deriv à ${hm(scannedAt)}, ${family}, en ${spec.tf}.`;
   render(true);
-  notify();
+  alertLive();
 }
 
-function notify() {
-  if (!store.get("ct.notif", false) || !("Notification" in window) || Notification.permission !== "granted") return;
-  const seen = store.get("ct.seen", {});
+function alertLive() {
+  const seen = store.get("ct.ntfy", {});
   const spec = styleById(styleId);
+  let changed = false;
   for (const r of reports) {
-    if (!r.pattern) continue;
-    const key = `${r.id}:${r.pattern.key}`;
+    if (!openNow(r)) continue;
+    const key = `${r.id}:${styleId}:${r.pattern.key}`;
     if (seen[key]) continue;
-    seen[key] = 1;
+    seen[key] = Date.now();
+    changed = true;
     const mk = MARKETS.find((m) => m.id === r.id);
+    const plan = planOf(r);
     const sens = r.dir < 0 ? "VENDRE" : "ACHETER";
-    const body = `${spec.label} · ${sens} · ${r.pattern.side} à juger · cou ${fmt(r.pattern.neck, mk.dp)} · 2e extrémum ${fmt(r.pattern.ext2, mk.dp)}`;
-    try { new Notification(`${mk.name}`, { body, tag: key }); } catch (e) {}
+    const title = `${sens} ${mk.name}`;
+    const body = [`${spec.label} ${spec.tf}`, `Entrée ${fmt(plan.entry, mk.dp)}`, `SL ${fmt(plan.sl, mk.dp)}`, ...plan.tps.map((t, i) => `TP ${i + 1} ${fmt(t.price, mk.dp)}`)].join("\n");
+    if (store.get("ct.notif", false) && "Notification" in window && Notification.permission === "granted") {
+      try { new Notification(title, { body, tag: key }); } catch (e) {}
+    }
+    fetch("https://ntfy.sh/catrade-a8e3f19c4d", {
+      method: "POST",
+      headers: { Title: title, Priority: "5", Tags: "rotating_light", Click: "https://cathep.github.io/catrade/" },
+      body,
+    }).catch(() => {});
   }
-  store.set("ct.seen", seen);
+  if (changed) store.set("ct.ntfy", seen);
 }
 
 function choose(id, c) {
@@ -574,7 +596,7 @@ document.addEventListener("click", (e) => {
       if (note) note.textContent = ok
         ? "Alertes actives. Un nouveau W ou M seulement, tant que cette page reste ouverte."
         : "Alerte refusée. Écran verrouillé : la veille Grok part à 8 h, 13 h et 18 h.";
-      if (ok) notify();
+      if (ok) alertLive();
     });
   }
 });
@@ -599,4 +621,7 @@ const notifOk = store.get("ct.notif", false) && "Notification" in window && Noti
 $("#notif").textContent = notifOk ? "Alertes actives" : "Activer les alertes";
 $("#notif").className = notifOk ? "btn on" : "btn";
 scan();
-setInterval(() => { if (!busy) scan(); }, 15 * 60 * 1000);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && !busy) scan();
+});
+setInterval(() => { if (document.visibilityState === "visible" && !busy) scan(); }, 90 * 1000);
