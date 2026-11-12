@@ -101,6 +101,11 @@ async function publish(title, body, sell) {
   await sleep(350);
 }
 
+function pctText(r) {
+  if (!r.record?.n) return "peu de cas";
+  return `${Math.round((100 * r.record.wins) / r.record.n)} %`;
+}
+
 function grade(r) {
   const p = r.pattern;
   const rr = r.levels?.rr || 0;
@@ -137,10 +142,12 @@ try {
       const sell = r.dir < 0;
       const sens = sell ? "SELL" : "BUY";
       const rang = grade(r);
-      const title = `${rang} ${sens} ${mk.name}`;
+      const pct = pctText(r);
+      const title = `${rang} ${pct} ${sens} ${mk.name}`;
       const tps = r.levels.tps && r.levels.tps.length ? r.levels.tps : [{ price: r.levels.tp, reward: r.levels.reward }];
       const body = [
         rang,
+        pct,
         sens,
         `${style.label} ${style.tf}`,
         `Entrée ${fmt(r.levels.entry, mk.dp)}`,

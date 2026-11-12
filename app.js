@@ -520,6 +520,11 @@ async function scan() {
   alertLive();
 }
 
+function pctText(r) {
+  if (!r.record?.n) return "peu de cas";
+  return `${Math.round((100 * r.record.wins) / r.record.n)} %`;
+}
+
 function grade(r) {
   const p = r.pattern;
   const rr = r.levels?.rr || 0;
@@ -544,8 +549,9 @@ function alertLive() {
     const plan = planOf(r);
     const sens = r.dir < 0 ? "SELL" : "BUY";
     const rang = grade(r);
-    const title = `${rang} ${sens} ${mk.name}`;
-    const body = [rang, sens, `${spec.label} ${spec.tf}`, `Entrée ${fmt(plan.entry, mk.dp)}`, `SL ${fmt(plan.sl, mk.dp)}`, ...plan.tps.map((t, i) => `TP ${i + 1} ${fmt(t.price, mk.dp)}`)].join("\n");
+    const pct = pctText(r);
+    const title = `${rang} ${pct} ${sens} ${mk.name}`;
+    const body = [rang, pct, sens, `${spec.label} ${spec.tf}`, `Entrée ${fmt(plan.entry, mk.dp)}`, `SL ${fmt(plan.sl, mk.dp)}`, ...plan.tps.map((t, i) => `TP ${i + 1} ${fmt(t.price, mk.dp)}`)].join("\n");
     if (store.get("ct.notif", false) && "Notification" in window && Notification.permission === "granted") {
       try { new Notification(title, { body, tag: key }); } catch (e) {}
     }
