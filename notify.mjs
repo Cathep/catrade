@@ -101,12 +101,20 @@ async function publish(title, body, sell) {
   await sleep(350);
 }
 
+function grade(r) {
+  const p = r.pattern;
+  const rr = r.levels?.rr || 0;
+  const complete = p.slow && p.secondPart && p.reintegrated && !p.tooFar && !p.slHit && !p.tpHit && !r.opposed;
+  if (complete && rr >= 2) return "MEILLEUR";
+  if (rr >= 1 && p.reintegrated && !p.tooFar && !p.slHit && !p.tpHit) return "MOYEN";
+  return "NUL";
+}
+
 const markets = MARKETS;
 const cache = new Map();
 const ws = await openDeriv();
 const now = Date.now() / 1000;
 let sent = 0;
-const picks = [];
 
 try {
   for (const style of styles) {
@@ -122,23 +130,17 @@ try {
         cache.set(`${mk.id}:${style.step}`, bars);
         await sleep(700);
       }
-      const r = evaluate(mk, bars, now, style, false);
-      if (!r.pattern || r.state !== "avis" || !r.levels || !(r.levels.rr >= 2)) continue;
+      const r = evaluate(mk, bars, now, style, true);
+      if (!r.pattern || r.state !== "avis" || !r.levels) continue;
       const id = `${mk.id}:${style.id}:${r.pattern.key}`;
       if (seen.has(id)) continue;
-      const prev = picks.find((p) => p.mk.id === mk.id);
-      if (!prev || r.levels.rr > prev.r.levels.rr) {
-        if (prev) picks.splice(picks.indexOf(prev), 1);
-        picks.push({ mk, style, r, id });
-      }
-    }
-  }
-  for (const { mk, style, r, id } of picks) {
       const sell = r.dir < 0;
       const sens = sell ? "SELL" : "BUY";
-      const title = `${sens} ${mk.name}`;
+      const rang = grade(r);
+      const title = `${sens} ${rang} ${mk.name}`;
       const tps = r.levels.tps && r.levels.tps.length ? r.levels.tps : [{ price: r.levels.tp, reward: r.levels.reward }];
       const body = [
+        rang,
         sens,
         `${style.label} ${style.tf}`,
         `Entrée ${fmt(r.levels.entry, mk.dp)}`,
@@ -149,6 +151,7 @@ try {
       await publish(title, body, sell);
       seen.add(id);
       sent++;
+    }
   }
 } finally {
   ws.close();
