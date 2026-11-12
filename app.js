@@ -67,7 +67,7 @@ function askDeriv(symbol, granularity) {
     }
     ws.addEventListener("message", onMsg);
     ws.send(JSON.stringify({
-      ticks_history: symbol, adjust_start_time: 1, count: 400, end: "latest", start: 1, style: "candles", granularity,
+      ticks_history: symbol, adjust_start_time: 1, count: 240, end: "latest", start: 1, style: "candles", granularity,
     }));
   }));
 }
@@ -241,14 +241,17 @@ async function scan() {
   const spec = styleById(styleId);
   $("#status").textContent = `Lecture des prix : 0 sur ${MARKETS.length}`;
   const out = [];
-  for (let i = 0; i < MARKETS.length; i++) {
+  for (let i = 0; i < MARKETS.length; i += 3) {
     if (token !== gen) return;
-    const mk = MARKETS[i];
-    try { out[i] = evaluate(mk, await fetchOHLC(mk.id, spec.step), Date.now() / 1000, spec, manual); }
-    catch (e) { out[i] = evaluate(mk, null, Date.now() / 1000, spec, manual); }
+    const batch = MARKETS.slice(i, i + 3);
+    await Promise.all(batch.map(async (mk, k) => {
+      const idx = i + k;
+      try { out[idx] = evaluate(mk, await fetchOHLC(mk.id, spec.step), Date.now() / 1000, spec, manual); }
+      catch (e) { out[idx] = evaluate(mk, null, Date.now() / 1000, spec, manual); }
+    }));
     reports = out.filter(Boolean);
     scannedAt = Date.now();
-    $("#status").textContent = `Lecture des prix : ${i + 1} sur ${MARKETS.length}`;
+    $("#status").textContent = `Lecture des prix : ${Math.min(i + batch.length, MARKETS.length)} sur ${MARKETS.length}`;
     render(i === 0);
   }
   if (token !== gen) return;
