@@ -126,14 +126,16 @@ try {
       const id = `${mk.id}:${style.id}:${r.pattern.key}`;
       if (seen.has(id)) continue;
       const sell = r.dir < 0;
-      const sens = sell ? "vendre" : "acheter";
-      const title = `CATRADE ${sens.toUpperCase()} ${mk.name}`;
+      const sens = sell ? "SELL" : "BUY";
+      const title = `${sens} ${mk.name}`;
       const tps = r.levels.tps && r.levels.tps.length ? r.levels.tps : [{ price: r.levels.tp, reward: r.levels.reward }];
       const body = [
+        sens,
+        `${style.label} ${style.tf}`,
         `Entrée ${fmt(r.levels.entry, mk.dp)}`,
-        `Protection ${fmt(r.levels.sl, mk.dp)} (${distText(mk, r.levels.dist)})`,
-        ...tps.map((t, i) => `TP${tps.length > 1 ? i + 1 : ""} ${fmt(t.price, mk.dp)} (${distText(mk, t.reward)})`),
-        `${r.pattern.side} à juger. Fermer au plus tard ${deadline(now, style)}.`,
+        `SL ${fmt(r.levels.sl, mk.dp)} (${distText(mk, r.levels.dist)})`,
+        ...tps.map((t, i) => `TP ${i + 1} ${fmt(t.price, mk.dp)} (${distText(mk, t.reward)})`),
+        `Fermer au plus tard ${deadline(now, style)}.`,
       ].join("\n");
       await publish(title, body, sell);
       seen.add(id);

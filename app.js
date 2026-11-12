@@ -532,9 +532,9 @@ function alertLive() {
     changed = true;
     const mk = MARKETS.find((m) => m.id === r.id);
     const plan = planOf(r);
-    const sens = r.dir < 0 ? "VENDRE" : "ACHETER";
+    const sens = r.dir < 0 ? "SELL" : "BUY";
     const title = `${sens} ${mk.name}`;
-    const body = [`${spec.label} ${spec.tf}`, `Entrée ${fmt(plan.entry, mk.dp)}`, `SL ${fmt(plan.sl, mk.dp)}`, ...plan.tps.map((t, i) => `TP ${i + 1} ${fmt(t.price, mk.dp)}`)].join("\n");
+    const body = [sens, `${spec.label} ${spec.tf}`, `Entrée ${fmt(plan.entry, mk.dp)}`, `SL ${fmt(plan.sl, mk.dp)}`, ...plan.tps.map((t, i) => `TP ${i + 1} ${fmt(t.price, mk.dp)}`)].join("\n");
     if (store.get("ct.notif", false) && "Notification" in window && Notification.permission === "granted") {
       try { new Notification(title, { body, tag: key }); } catch (e) {}
     }
