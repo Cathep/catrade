@@ -570,6 +570,47 @@
   background: rgb(255 255 255 / 0.06);
 }
 
+.lots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.7rem 0;
+}
+
+.lots button {
+  min-height: 40px;
+  min-width: 3.2rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-edge);
+  background: transparent;
+  font-weight: 700;
+}
+
+.lots button.on {
+  background: var(--color-ink);
+  color: var(--color-bg);
+  border-color: var(--color-ink);
+}
+
+.lot-in {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.lot-in input {
+  width: 6rem;
+  min-height: 40px;
+  padding: 0.3rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid var(--color-edge);
+  background: transparent;
+  color: var(--color-ink);
+  font: inherit;
+}
 .sim summary {
   font-weight: 700;
   cursor: pointer;

@@ -29,9 +29,15 @@ let reports = [];
 let busy = false;
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
-let simAmt = store.get("ct.simAmt", 10);
-let simMode = store.get("ct.simMode", "risk");
+let simLot = store.get("ct.simLot", 0.01);
+const LOTS = [0.01, 0.05, 0.1, 0.2, 0.5, 1];
 let gen = 0;
+
+function moneyFor(mk, price, dist, quote, lots) {
+  const per = lotLoss(mk, price, dist, quote);
+  if (per != null) return per * (lots / 0.01);
+  return dist * lots;
+}
 
 function tick() {
   const n = Date.now();
@@ -145,28 +151,23 @@ function card(r, i) {
   const kind = !r.pattern ? "W/M non détecté" : r.pattern.slow && r.pattern.secondPart && r.pattern.reintegrated && !r.pattern.tooFar ? `${r.pattern.side} à juger` : `${r.pattern.side} possible`;
   const kindOk = r.pattern && r.pattern.reintegrated && r.pattern.secondPart && !r.pattern.slHit;
   const quote = mk.id.startsWith("USD") ? null : quoteOf(mk.id.slice(3));
-  const loss = r.levels ? lotLoss(mk, r.price ?? r.levels.entry, r.levels.dist, quote) : null;
   const levels = r.levels ? `<dl class="lv">
       <div><dt>${r.levels.entryKind === "cou" ? "Entrée au cou" : "Entrée"}</dt><dd>${fmt(r.levels.entry, mk.dp)}</dd></div>
       <div><dt>Stop</dt><dd class="sl">${fmt(r.levels.sl, mk.dp)}</dd><span>${esc(distText(mk, r.levels.dist))}</span></div>
       <div><dt>Objectif</dt><dd class="tp">${fmt(r.levels.tp, mk.dp)}</dd><span>${esc(distText(mk, r.levels.reward))} · ${num(r.levels.rr, 2)} R</span></div>
     </dl>` + (r.pattern ? `<dl class="meta">
       <div><dt>Cou</dt><dd>${fmt(r.pattern.neck, mk.dp)}</dd><span>trait bleu</span></div>
-      <div><dt>${r.pattern.side === "W" ? "2e creux" : "2e sommet"}</dt><dd>${fmt(r.pattern.ext2, mk.dp)}</dd><span>trait ambre${loss != null ? ` · ${num(loss, 2)} $ / 0,01 lot` : ""}</span></div>
+      <div><dt>${r.pattern.side === "W" ? "2e creux" : "2e sommet"}</dt><dd>${fmt(r.pattern.ext2, mk.dp)}</dd><span>trait ambre${r.levels ? ` · ${num(moneyFor(mk, r.price ?? r.levels.entry, r.levels.dist, quote, simLot), 2)} $ pour ${num(simLot, 2)} lot` : ""}</span></div>
     </dl>` : "") : `<p class="taken">Pas de niveaux proposés : la géométrie du motif manque, ou elle est déjà invalidée.</p>`;
   const notes = r.notes.slice(0, 3).map((n) => `<li>${esc(n)}</li>`).join("");
   const past = r.record.n
     ? `${r.record.n} passages sur ~${r.days} j. Résultat moyen ${r.record.avg >= 0 ? "+" : "−"}${num(Math.abs(r.record.avg), 2)} R.`
     : "Trop peu de géométries passées pour un bilan.";
-  const sim = r.levels ? `<details class="sim" data-id="${esc(r.id)}"><summary>Simuler un gain</summary>
-      <div class="sim-f">
-        <label>Montant en $<input type="number" inputmode="decimal" min="0" step="any" value="${simAmt}" data-sim="amt"></label>
-        <label>Ce montant est…<select data-sim="mode">
-          <option value="risk"${simMode === "risk" ? " selected" : ""}>Ce que je perds au stop</option>
-          <option value="cash"${simMode === "cash" ? " selected" : ""}>Ma mise, sans levier</option>
-          <option value="lev"${simMode === "lev" ? " selected" : ""}>Ma mise, avec levier</option>
-        </select></label>
+  const sim = r.levels ? `<details class="sim" data-id="${esc(r.id)}"><summary>Simuler un lot</summary>
+      <div class="lots" role="group" aria-label="Lot">
+        ${LOTS.map((v) => `<button type="button" class="${simLot === v ? "on" : ""}" data-lot="${v}">${num(v, 2)}</button>`).join("")}
       </div>
+      <label class="lot-in">Autre lot<input type="number" inputmode="decimal" min="0" step="0.01" value="${simLot}" data-sim="lot"></label>
       <dl class="sim-r" data-sim="out"></dl>
       <p class="sim-n" data-sim="note"></p>
     </details>` : "";
@@ -193,23 +194,18 @@ function simulate(box) {
   const r = reports.find((x) => x.id === id);
   if (!r || !r.levels) return;
   const mk = MARKETS.find((m) => m.id === id);
-  const amt = Math.max(0, parseFloat(box.querySelector("[data-sim=amt]").value) || 0);
-  const mode = box.querySelector("[data-sim=mode]").value;
-  const pl = r.levels;
-  let lossV, gain, note;
-  if (mode === "risk") {
-    lossV = amt; gain = amt * (pl.reward / pl.dist);
-    note = `La taille est calculée pour perdre ${num(amt, 2)} $ au stop.`;
-  } else {
-    const lev = mode === "lev" ? (mk.cls === "fx" ? 30 : mk.cls === "gold" ? 20 : 1) : 1;
-    const units = (amt * lev) / pl.entry;
-    lossV = units * pl.dist; gain = units * pl.reward;
-    note = mode === "lev" ? `Levier indicatif ${mk.cls === "fx" ? "×30" : mk.cls === "gold" ? "×20" : "aucun : c'est un indice"}.` : `${units.toLocaleString("fr-FR", { maximumSignificantDigits: 3 })} unités.`;
-  }
+  const lots = Math.max(0, simLot);
+  const quote = mk.id.startsWith("USD") ? null : quoteOf(mk.id.slice(3));
+  const price = r.price ?? r.levels.entry;
+  const lossV = moneyFor(mk, price, r.levels.dist, quote, lots);
+  const gain = moneyFor(mk, price, r.levels.reward, quote, lots);
   const avg = r.record.n ? r.record.avg * lossV : 0;
+  const pip = lotLoss(mk, price, r.levels.dist, quote) != null;
   const sg = (x) => `${x >= 0 ? "+" : "−"}${num(Math.abs(x), 2)} $`;
   box.querySelector("[data-sim=out]").innerHTML = `<div><dt>Objectif atteint</dt><dd class="g">${sg(gain)}</dd></div><div><dt>Stop touché</dt><dd class="l">${sg(-lossV)}</dd></div><div><dt>En moyenne</dt><dd>${r.record.n ? sg(avg) : "—"}</dd></div>`;
-  box.querySelector("[data-sim=note]").textContent = `${note} « En moyenne » rejoue ces règles sur le passé, frais compris. Ce n'est pas une promesse.`;
+  box.querySelector("[data-sim=note]").textContent = pip
+    ? `Lot ${num(lots, 2)}. Le forex et l'or suivent la valeur du pip.`
+    : `Lot ${num(lots, 2)}. Sur cet indice, 1 lot gagne ou perd 1 $ par point.`;
 }
 
 function render(fresh) {
@@ -317,6 +313,7 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.style) { styleId = b.dataset.style; store.set("ct.style", styleId); paintChrome(); scan(); }
   else if (b.dataset.family) { family = b.dataset.family; store.set("ct.family", family); paintChrome(); scan(); }
   else if (b.id === "manual") { manual = !manual; store.set("ct.manual", manual); paintChrome(); scan(); }
+  else if (b.dataset.lot) { simLot = parseFloat(b.dataset.lot); store.set("ct.simLot", simLot); render(false); }
   else if (b.dataset.take) choose(b.dataset.take, "pris");
   else if (b.dataset.skip) choose(b.dataset.skip, "passe");
   else if (b.dataset.undo) choose(b.dataset.undo, null);
@@ -341,8 +338,7 @@ document.addEventListener("click", (e) => {
 document.addEventListener("input", (e) => {
   const box = e.target.closest(".sim");
   if (!box) return;
-  if (e.target.dataset.sim === "amt") { simAmt = parseFloat(e.target.value) || 0; store.set("ct.simAmt", simAmt); }
-  if (e.target.dataset.sim === "mode") { simMode = e.target.value; store.set("ct.simMode", simMode); }
+  if (e.target.dataset.sim === "lot") { simLot = Math.max(0, parseFloat(e.target.value) || 0); store.set("ct.simLot", simLot); }
   simulate(box);
 });
 document.addEventListener("toggle", (e) => { if (e.target.classList && e.target.classList.contains("sim") && e.target.open) simulate(e.target); }, true);
