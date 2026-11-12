@@ -90,7 +90,7 @@ const LOT_SPEC = {
   "USD Basket": { min: 0.01, max: 12, contract: 100, ccy: "USD" },
   "Bear Market Index": { min: 0.01, max: 100, contract: 1, ccy: "USD" },
   "Bull Market Index": { min: 0.01, max: 100, contract: 1, ccy: "USD" },
-  "XAUUSD": { min: 0.01, max: 30, contract: 100, ccy: "XAU" },
+  "XAUUSD": { min: 0.01, max: 30, contract: 100, ccy: "USD" },
   "Palladium/USD": { min: 0.01, max: 10, contract: 100, ccy: "XPD" },
   "Platinum/USD": { min: 0.01, max: 10, contract: 100, ccy: "XPT" },
   "Silver/USD": { min: 0.01, max: 15, contract: 5000, ccy: "XAG" },
@@ -158,10 +158,15 @@ function lotFor(mk) {
 }
 function moneyFor(mk, price, dist, lots) {
   const s = specOf(mk);
-  let v = dist * s.contract * lots;
-  let ccy = s.ccy;
-  if (mk.cls === "fx" && mk.id.startsWith("frxUSD") && price) { v = v / price; ccy = "USD"; }
-  return { v, ccy };
+  const v = dist * s.contract * lots;
+  if (mk.cls === "gold") return { v, ccy: "USD" };
+  if (mk.cls === "fx") {
+    const quote = mk.id.slice(6);
+    if (!quote || quote === "USD") return { v, ccy: "USD" };
+    if (mk.id.startsWith("frxUSD") && price) return { v: v / price, ccy: "USD" };
+    return { v, ccy: quote };
+  }
+  return { v, ccy: s.ccy };
 }
 function moneyText(x, ccy) {
   const sign = x >= 0 ? "+" : "−";
@@ -334,8 +339,13 @@ function simulate(box) {
   const gain = moneyFor(mk, price, r.levels.reward, lots);
   const avg = r.record.n ? r.record.avg * loss.v : 0;
   box.querySelector("[data-sim=out]").innerHTML = `<div><dt>Objectif atteint</dt><dd class="g">${moneyText(gain.v, gain.ccy)}</dd></div><div><dt>Stop touché</dt><dd class="l">${moneyText(-loss.v, loss.ccy)}</dd></div><div><dt>En moyenne</dt><dd>${r.record.n ? moneyText(avg, loss.ccy) : "—"}</dd></div>`;
-  const unit = spec.contract >= 1000 ? `${spec.contract.toLocaleString("fr-FR")} unités` : `${spec.contract} ${spec.ccy} par point`;
-  box.querySelector("[data-sim=note]").textContent = `Lot minimum Deriv ${num(spec.min, lotDigits(spec.min))}. 1 lot = ${unit}.`;
+  const metal = mk.cls === "gold" || /^frxX(AU|AG|PD|PT)/.test(mk.id);
+  const unit = metal
+    ? `1,00 $ de cours = ${num(spec.contract, 0)} $ pour 1 lot`
+    : mk.cls === "fx"
+      ? `1 lot = ${spec.contract.toLocaleString("fr-FR")} ${spec.ccy}`
+      : `1 lot = ${spec.contract} ${spec.ccy === "USD" ? "$" : spec.ccy} par point`;
+  box.querySelector("[data-sim=note]").textContent = `Lot minimum Deriv ${num(spec.min, lotDigits(spec.min))}. ${unit}.`;
 }
 
 function render(fresh) {
