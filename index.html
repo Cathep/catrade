@@ -6,7 +6,13 @@
 <title>CATRADE</title>
 <meta name="description" content="CATRADE lit dix marchés et propose un sens à examiner, le W ou le M détecté, un stop et un objectif.">
 <meta name="theme-color" content="#0A1330">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CATRADE">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
@@ -76,7 +82,7 @@
       </dl>
     </section>
   </div>
-  <footer class="note glass">CATRADE 4.42. Tous les marchés Deriv ouverts : Volatility, Boom, Crash, Jump, Step, indices, or, forex. Pas Weltrade.</footer>
+  <footer class="note glass">CATRADE 4.42. Tous les marchés Deriv ouverts : Volatility, Boom, Crash, Jump, Step, indices, or, forex. Pas Weltrade. Icône sur l'iPhone : Safari, Partager, Sur l'écran d'accueil.</footer>
   <div class="alertbox glass">
     <div>
       <p>Scalping toutes les 15 min, Day toutes les heures, Swing toutes les 4 heures. Pas à la même minute. Chaque nouveau W ou M part dans ntfy, une notification par marché.</p>
@@ -88,5 +94,8 @@
 </div>
 <script src="engine.js?v=16"></script>
 <script src="app.js?v=22"></script>
+<script>
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+</script>
 </body>
 </html>
