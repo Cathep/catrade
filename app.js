@@ -29,14 +29,144 @@ let reports = [];
 let busy = false;
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
-let simLot = store.get("ct.simLot", 0.01);
-const LOTS = [0.01, 0.05, 0.1, 0.2, 0.5, 1];
+let simLot = store.get("ct.simLot", null);
 let gen = 0;
 
-function moneyFor(mk, price, dist, quote, lots) {
-  const per = lotLoss(mk, price, dist, quote);
-  if (per != null) return per * (lots / 0.01);
-  return dist * lots;
+const LOT_SPEC = {
+  "Volatility 10 (1s) Index": { min: 0.5, max: 810, contract: 1, ccy: "USD" },
+  "Volatility 10 Index": { min: 0.5, max: 1280, contract: 1, ccy: "USD" },
+  "Volatility 100 (1s) Index": { min: 1, max: 900, contract: 1, ccy: "USD" },
+  "Volatility 100 Index": { min: 1, max: 1000, contract: 1, ccy: "USD" },
+  "Volatility 150 (1s) Index": { min: 1, max: 50, contract: 1, ccy: "USD" },
+  "Volatility 250 (1s) Index": { min: 10, max: 50, contract: 1, ccy: "USD" },
+  "Volatility 15 (1s) Index": { min: 0.2, max: 370, contract: 1, ccy: "USD" },
+  "Volatility 25 (1s) Index": { min: 0.005, max: 4, contract: 1, ccy: "USD" },
+  "Volatility 25 Index": { min: 0.5, max: 1000, contract: 1, ccy: "USD" },
+  "Volatility 30 (1s) Index": { min: 0.2, max: 360, contract: 1, ccy: "USD" },
+  "Volatility 50 (1s) Index": { min: 0.005, max: 6, contract: 1, ccy: "USD" },
+  "Volatility 50 Index": { min: 4, max: 12000, contract: 1, ccy: "USD" },
+  "Volatility 75 (1s) Index": { min: 0.05, max: 240, contract: 1, ccy: "USD" },
+  "Volatility 75 Index": { min: 0.01, max: 50, contract: 1, ccy: "USD" },
+  "Volatility 90 (1s) Index": { min: 0.1, max: 50, contract: 1, ccy: "USD" },
+  "Boom 100 Index": { min: 0.1, max: 160, contract: 1, ccy: "USD" },
+  "Boom 1000 Index": { min: 0.2, max: 250, contract: 1, ccy: "USD" },
+  "Boom 150 Index": { min: 0.5, max: 1300, contract: 1, ccy: "USD" },
+  "Boom 200 Index": { min: 0.1, max: 130, contract: 1, ccy: "USD" },
+  "Boom 300 Index": { min: 0.5, max: 1000, contract: 1, ccy: "USD" },
+  "Boom 50 Index": { min: 0.1, max: 200, contract: 1, ccy: "USD" },
+  "Boom 500 Index": { min: 0.2, max: 500, contract: 1, ccy: "USD" },
+  "Boom 600 Index": { min: 0.2, max: 470, contract: 1, ccy: "USD" },
+  "Boom 900 Index": { min: 0.2, max: 340, contract: 1, ccy: "USD" },
+  "Boom 99 Index": { min: 0.1, max: 160, contract: 1, ccy: "USD" },
+  "Crash 100 Index": { min: 0.1, max: 160, contract: 1, ccy: "USD" },
+  "Crash 1000 Index": { min: 0.2, max: 600, contract: 1, ccy: "USD" },
+  "Crash 150 Index": { min: 0.5, max: 1230, contract: 1, ccy: "USD" },
+  "Crash 200 Index": { min: 0.1, max: 130, contract: 1, ccy: "USD" },
+  "Crash 300 Index": { min: 0.5, max: 515, contract: 1, ccy: "USD" },
+  "Crash 50 Index": { min: 0.1, max: 200, contract: 1, ccy: "USD" },
+  "Crash 500 Index": { min: 0.2, max: 730, contract: 1, ccy: "USD" },
+  "Crash 600 Index": { min: 0.2, max: 100, contract: 1, ccy: "USD" },
+  "Crash 900 Index": { min: 0.2, max: 160, contract: 1, ccy: "USD" },
+  "Crash 99 Index": { min: 0.1, max: 160, contract: 1, ccy: "USD" },
+  "Jump 10 Index": { min: 0.01, max: 20, contract: 1, ccy: "USD" },
+  "Jump 100 Index": { min: 0.1, max: 380, contract: 1, ccy: "USD" },
+  "Jump 25 Index": { min: 0.01, max: 7, contract: 1, ccy: "USD" },
+  "Jump 50 Index": { min: 0.01, max: 10, contract: 1, ccy: "USD" },
+  "Jump 75 Index": { min: 0.01, max: 20, contract: 1, ccy: "USD" },
+  "Step Index": { min: 0.1, max: 270, contract: 10, ccy: "USD" },
+  "Step Index 200": { min: 0.1, max: 70, contract: 10, ccy: "USD" },
+  "Step Index 300": { min: 0.1, max: 40, contract: 10, ccy: "USD" },
+  "Step Index 400": { min: 0.1, max: 45, contract: 10, ccy: "USD" },
+  "Step Index 500": { min: 0.1, max: 80, contract: 10, ccy: "USD" },
+  "Step Index 1000": { min: 0.1, max: 270, contract: 10, ccy: "USD" },
+  "Step Index 1500": { min: 0.1, max: 270, contract: 10, ccy: "USD" },
+  "Step Index 2000": { min: 0.1, max: 270, contract: 10, ccy: "USD" },
+  "Range Break 100 Index": { min: 0.01, max: 15, contract: 1, ccy: "USD" },
+  "Range Break 200 Index": { min: 0.01, max: 20, contract: 1, ccy: "USD" },
+  "AUD Basket": { min: 0.01, max: 10, contract: 100, ccy: "USD" },
+  "EUR Basket": { min: 0.01, max: 13, contract: 100, ccy: "USD" },
+  "GBP Basket": { min: 0.01, max: 10, contract: 100, ccy: "USD" },
+  "Gold Basket": { min: 0.01, max: 2, contract: 1, ccy: "USD" },
+  "USD Basket": { min: 0.01, max: 12, contract: 100, ccy: "USD" },
+  "Bear Market Index": { min: 0.01, max: 100, contract: 1, ccy: "USD" },
+  "Bull Market Index": { min: 0.01, max: 100, contract: 1, ccy: "USD" },
+  "XAUUSD": { min: 0.01, max: 30, contract: 100, ccy: "XAU" },
+  "Palladium/USD": { min: 0.01, max: 10, contract: 100, ccy: "XPD" },
+  "Platinum/USD": { min: 0.01, max: 10, contract: 100, ccy: "XPT" },
+  "Silver/USD": { min: 0.01, max: 15, contract: 5000, ccy: "XAG" },
+  "Australia 200": { min: 0.1, max: 200, contract: 1, ccy: "AUD" },
+  "Euro 50": { min: 0.1, max: 500, contract: 1, ccy: "EUR" },
+  "France 40": { min: 0.1, max: 100, contract: 1, ccy: "EUR" },
+  "Germany 40": { min: 0.1, max: 100, contract: 1, ccy: "EUR" },
+  "Hong Kong 50": { min: 0.1, max: 100, contract: 1, ccy: "HKD" },
+  "Japan 225": { min: 10, max: 5000, contract: 1, ccy: "JPY" },
+  "Netherlands 25": { min: 0.1, max: 100, contract: 1, ccy: "EUR" },
+  "Swiss 20": { min: 0.1, max: 100, contract: 1, ccy: "CHF" },
+  "UK 100": { min: 0.1, max: 200, contract: 1, ccy: "GBP" },
+  "US 500": { min: 0.1, max: 750, contract: 1, ccy: "USD" },
+  "US Tech 100": { min: 0.1, max: 200, contract: 1, ccy: "USD" },
+  "Wall Street 30": { min: 0.1, max: 150, contract: 1, ccy: "USD" },
+  "BTC/USD": { min: 0.01, max: 50, contract: 1, ccy: "USD" },
+  "ETH/USD": { min: 0.1, max: 750, contract: 1, ccy: "USD" },
+  "AUD/CAD": { min: 0.01, max: 15, contract: 100000, ccy: "AUD" },
+  "AUD/CHF": { min: 0.01, max: 15, contract: 100000, ccy: "AUD" },
+  "AUD/JPY": { min: 0.01, max: 40, contract: 100000, ccy: "AUD" },
+  "AUD/NZD": { min: 0.01, max: 15, contract: 100000, ccy: "AUD" },
+  "AUD/USD": { min: 0.01, max: 100, contract: 100000, ccy: "AUD" },
+  "EUR/AUD": { min: 0.01, max: 40, contract: 100000, ccy: "EUR" },
+  "EUR/CAD": { min: 0.01, max: 40, contract: 100000, ccy: "EUR" },
+  "EUR/CHF": { min: 0.01, max: 40, contract: 100000, ccy: "EUR" },
+  "EUR/GBP": { min: 0.01, max: 40, contract: 100000, ccy: "EUR" },
+  "EUR/JPY": { min: 0.01, max: 40, contract: 100000, ccy: "EUR" },
+  "EUR/NZD": { min: 0.01, max: 15, contract: 100000, ccy: "EUR" },
+  "EUR/USD": { min: 0.01, max: 100, contract: 100000, ccy: "EUR" },
+  "GBP/AUD": { min: 0.01, max: 40, contract: 100000, ccy: "GBP" },
+  "GBP/CAD": { min: 0.01, max: 15, contract: 100000, ccy: "GBP" },
+  "GBP/CHF": { min: 0.01, max: 15, contract: 100000, ccy: "GBP" },
+  "GBP/JPY": { min: 0.01, max: 100, contract: 100000, ccy: "GBP" },
+  "GBP/NZD": { min: 0.01, max: 15, contract: 100000, ccy: "GBP" },
+  "GBP/USD": { min: 0.01, max: 100, contract: 100000, ccy: "GBP" },
+  "NZD/JPY": { min: 0.01, max: 15, contract: 100000, ccy: "NZD" },
+  "NZD/USD": { min: 0.01, max: 100, contract: 100000, ccy: "NZD" },
+  "USD/CAD": { min: 0.01, max: 100, contract: 100000, ccy: "USD" },
+  "USD/CHF": { min: 0.01, max: 100, contract: 100000, ccy: "USD" },
+  "USD/JPY": { min: 0.01, max: 100, contract: 100000, ccy: "USD" },
+  "USD/MXN": { min: 0.01, max: 15, contract: 100000, ccy: "USD" },
+  "USD/PLN": { min: 0.01, max: 15, contract: 100000, ccy: "USD" },
+};
+
+function specOf(mk) {
+  return LOT_SPEC[mk.name] || { min: 0.01, max: 50, contract: 1, ccy: "USD" };
+}
+function lotDigits(v) { return v < 0.01 ? 3 : 2; }
+function lotChoices(s) {
+  const out = [];
+  for (const k of [1, 2, 5, 10, 20, 50]) {
+    const d = lotDigits(s.min);
+    const p = 10 ** d;
+    const v = Math.round(s.min * k * p) / p;
+    if (v + 1e-9 < s.min || v > s.max + 1e-9) continue;
+    if (!out.some((x) => Math.abs(x - v) < 1e-9)) out.push(v);
+  }
+  if (!out.length || Math.abs(out[0] - s.min) > 1e-9) out.unshift(s.min);
+  return out.slice(0, 6);
+}
+function lotFor(mk) {
+  const s = specOf(mk);
+  if (simLot != null && simLot + 1e-12 >= s.min && simLot <= s.max + 1e-12) return simLot;
+  return s.min;
+}
+function moneyFor(mk, price, dist, lots) {
+  const s = specOf(mk);
+  let v = dist * s.contract * lots;
+  let ccy = s.ccy;
+  if (mk.cls === "fx" && mk.id.startsWith("frxUSD") && price) { v = v / price; ccy = "USD"; }
+  return { v, ccy };
+}
+function moneyText(x, ccy) {
+  const sign = x >= 0 ? "+" : "−";
+  const body = num(Math.abs(x), 2);
+  return ccy === "USD" ? `${sign}${body} $` : `${sign}${body} ${ccy}`;
 }
 
 function tick() {
@@ -157,17 +287,20 @@ function card(r, i) {
       <div><dt>Objectif</dt><dd class="tp">${fmt(r.levels.tp, mk.dp)}</dd><span>${esc(distText(mk, r.levels.reward))} · ${num(r.levels.rr, 2)} R</span></div>
     </dl>` + (r.pattern ? `<dl class="meta">
       <div><dt>Cou</dt><dd>${fmt(r.pattern.neck, mk.dp)}</dd><span>trait bleu</span></div>
-      <div><dt>${r.pattern.side === "W" ? "2e creux" : "2e sommet"}</dt><dd>${fmt(r.pattern.ext2, mk.dp)}</dd><span>trait ambre${r.levels ? ` · ${num(moneyFor(mk, r.price ?? r.levels.entry, r.levels.dist, quote, simLot), 2)} $ pour ${num(simLot, 2)} lot` : ""}</span></div>
+      <div><dt>${r.pattern.side === "W" ? "2e creux" : "2e sommet"}</dt><dd>${fmt(r.pattern.ext2, mk.dp)}</dd><span>trait ambre${r.levels ? (() => { const m = moneyFor(mk, r.price ?? r.levels.entry, r.levels.dist, lotFor(mk)); return ` · ${num(Math.abs(m.v), 2)} ${m.ccy === "USD" ? "$" : m.ccy} pour ${num(lotFor(mk), lotDigits(specOf(mk).min))} lot`; })() : ""}</span></div>
     </dl>` : "") : `<p class="taken">Pas de niveaux proposés : la géométrie du motif manque, ou elle est déjà invalidée.</p>`;
   const notes = r.notes.slice(0, 3).map((n) => `<li>${esc(n)}</li>`).join("");
   const past = r.record.n
     ? `${r.record.n} passages sur ~${r.days} j. Résultat moyen ${r.record.avg >= 0 ? "+" : "−"}${num(Math.abs(r.record.avg), 2)} R.`
     : "Trop peu de géométries passées pour un bilan.";
+  const spec = specOf(mk);
+  const choices = lotChoices(spec);
+  const used = lotFor(mk);
   const sim = r.levels ? `<details class="sim" data-id="${esc(r.id)}"><summary>Simuler un lot</summary>
       <div class="lots" role="group" aria-label="Lot">
-        ${LOTS.map((v) => `<button type="button" class="${simLot === v ? "on" : ""}" data-lot="${v}">${num(v, 2)}</button>`).join("")}
+        ${choices.map((v) => `<button type="button" class="${Math.abs(used - v) < 1e-9 ? "on" : ""}" data-lot="${v}">${num(v, lotDigits(spec.min))}</button>`).join("")}
       </div>
-      <label class="lot-in">Autre lot<input type="number" inputmode="decimal" min="0" step="0.01" value="${simLot}" data-sim="lot"></label>
+      <label class="lot-in">Lot, minimum ${num(spec.min, lotDigits(spec.min))}<input type="number" inputmode="decimal" min="${spec.min}" step="${spec.min < 0.01 ? 0.001 : 0.01}" value="${used}" data-sim="lot"></label>
       <dl class="sim-r" data-sim="out"></dl>
       <p class="sim-n" data-sim="note"></p>
     </details>` : "";
@@ -194,18 +327,15 @@ function simulate(box) {
   const r = reports.find((x) => x.id === id);
   if (!r || !r.levels) return;
   const mk = MARKETS.find((m) => m.id === id);
-  const lots = Math.max(0, simLot);
-  const quote = mk.id.startsWith("USD") ? null : quoteOf(mk.id.slice(3));
+  const spec = specOf(mk);
+  const lots = lotFor(mk);
   const price = r.price ?? r.levels.entry;
-  const lossV = moneyFor(mk, price, r.levels.dist, quote, lots);
-  const gain = moneyFor(mk, price, r.levels.reward, quote, lots);
-  const avg = r.record.n ? r.record.avg * lossV : 0;
-  const pip = lotLoss(mk, price, r.levels.dist, quote) != null;
-  const sg = (x) => `${x >= 0 ? "+" : "−"}${num(Math.abs(x), 2)} $`;
-  box.querySelector("[data-sim=out]").innerHTML = `<div><dt>Objectif atteint</dt><dd class="g">${sg(gain)}</dd></div><div><dt>Stop touché</dt><dd class="l">${sg(-lossV)}</dd></div><div><dt>En moyenne</dt><dd>${r.record.n ? sg(avg) : "—"}</dd></div>`;
-  box.querySelector("[data-sim=note]").textContent = pip
-    ? `Lot ${num(lots, 2)}. Le forex et l'or suivent la valeur du pip.`
-    : `Lot ${num(lots, 2)}. Sur cet indice, 1 lot gagne ou perd 1 $ par point.`;
+  const loss = moneyFor(mk, price, r.levels.dist, lots);
+  const gain = moneyFor(mk, price, r.levels.reward, lots);
+  const avg = r.record.n ? r.record.avg * loss.v : 0;
+  box.querySelector("[data-sim=out]").innerHTML = `<div><dt>Objectif atteint</dt><dd class="g">${moneyText(gain.v, gain.ccy)}</dd></div><div><dt>Stop touché</dt><dd class="l">${moneyText(-loss.v, loss.ccy)}</dd></div><div><dt>En moyenne</dt><dd>${r.record.n ? moneyText(avg, loss.ccy) : "—"}</dd></div>`;
+  const unit = spec.contract >= 1000 ? `${spec.contract.toLocaleString("fr-FR")} unités` : `${spec.contract} ${spec.ccy} par point`;
+  box.querySelector("[data-sim=note]").textContent = `Lot minimum Deriv ${num(spec.min, lotDigits(spec.min))}. 1 lot = ${unit}.`;
 }
 
 function render(fresh) {
@@ -313,7 +443,14 @@ document.addEventListener("click", (e) => {
   else if (b.dataset.style) { styleId = b.dataset.style; store.set("ct.style", styleId); paintChrome(); scan(); }
   else if (b.dataset.family) { family = b.dataset.family; store.set("ct.family", family); paintChrome(); scan(); }
   else if (b.id === "manual") { manual = !manual; store.set("ct.manual", manual); paintChrome(); scan(); }
-  else if (b.dataset.lot) { simLot = parseFloat(b.dataset.lot); store.set("ct.simLot", simLot); render(false); }
+  else if (b.dataset.lot) {
+    const card = b.closest("article");
+    const mk = MARKETS.find((m) => m.id === (card && card.id.slice(2)));
+    const spec = mk ? specOf(mk) : { min: 0, max: Infinity };
+    const v = parseFloat(b.dataset.lot);
+    if (v + 1e-12 < spec.min) return;
+    simLot = v; store.set("ct.simLot", simLot); render(false);
+  }
   else if (b.dataset.take) choose(b.dataset.take, "pris");
   else if (b.dataset.skip) choose(b.dataset.skip, "passe");
   else if (b.dataset.undo) choose(b.dataset.undo, null);
@@ -338,7 +475,13 @@ document.addEventListener("click", (e) => {
 document.addEventListener("input", (e) => {
   const box = e.target.closest(".sim");
   if (!box) return;
-  if (e.target.dataset.sim === "lot") { simLot = Math.max(0, parseFloat(e.target.value) || 0); store.set("ct.simLot", simLot); }
+  if (e.target.dataset.sim === "lot") {
+    const mk = MARKETS.find((m) => m.id === box.dataset.id);
+    const spec = mk ? specOf(mk) : { min: 0, max: Infinity };
+    const v = Math.max(0, parseFloat(e.target.value) || 0);
+    if (v && v + 1e-12 < spec.min) return;
+    simLot = v; store.set("ct.simLot", simLot);
+  }
   simulate(box);
 });
 document.addEventListener("toggle", (e) => { if (e.target.classList && e.target.classList.contains("sim") && e.target.open) simulate(e.target); }, true);
