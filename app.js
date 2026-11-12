@@ -34,28 +34,51 @@ function tick() {
   $("#clock").innerHTML = `${hm(n)}<br>${esc(new Date(n).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}`;
 }
 
+let derivWs = null;
+let derivOpen = null;
+
+function openDeriv() {
+  if (derivWs && derivWs.readyState === 1) return Promise.resolve(derivWs);
+  if (derivOpen) return derivOpen;
+  derivOpen = new Promise((resolve, reject) => {
+    const ws = new WebSocket("wss://api.derivws.com/trading/v1/options/ws/public");
+    const timer = setTimeout(() => { ws.close(); reject(new Error("délai")); }, 8000);
+    ws.onopen = () => { clearTimeout(timer); derivWs = ws; resolve(ws); };
+    ws.onclose = () => { if (derivWs === ws) derivWs = null; };
+    ws.onerror = () => { clearTimeout(timer); reject(new Error("websocket")); };
+  }).finally(() => { derivOpen = null; });
+  return derivOpen;
+}
+
+function askDeriv(symbol, granularity) {
+  return openDeriv().then((ws) => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { ws.removeEventListener("message", onMsg); reject(new Error("délai")); }, 8000);
+    function onMsg(ev) {
+      let j;
+      try { j = JSON.parse(ev.data); } catch (e) { return; }
+      const asked = j.echo_req && j.echo_req.ticks_history;
+      if (asked && asked !== symbol) return;
+      if (j.error) { clearTimeout(timer); ws.removeEventListener("message", onMsg); reject(new Error(j.error.message || "Deriv")); return; }
+      if (j.msg_type === "candles" && j.candles && j.candles.length) {
+        clearTimeout(timer);
+        ws.removeEventListener("message", onMsg);
+        resolve(j.candles.map((c) => ({ t: c.epoch, o: +c.open, h: +c.high, l: +c.low, c: +c.close })));
+      }
+    }
+    ws.addEventListener("message", onMsg);
+    ws.send(JSON.stringify({
+      ticks_history: symbol, adjust_start_time: 1, count: 400, end: "latest", start: 1, style: "candles", granularity,
+    }));
+  }));
+}
+
 async function fetchOHLC(symbol, granularity) {
   for (let attempt = 1; ; attempt++) {
-    try {
-      return await new Promise((resolve, reject) => {
-        const ws = new WebSocket("wss://api.derivws.com/trading/v1/options/ws/public");
-        const timer = setTimeout(() => { ws.close(); reject(new Error("délai")); }, 12000);
-        ws.onopen = () => ws.send(JSON.stringify({
-          ticks_history: symbol, adjust_start_time: 1, count: 500, end: "latest", start: 1, style: "candles", granularity,
-        }));
-        ws.onmessage = (ev) => {
-          const j = JSON.parse(ev.data);
-          if (j.error) { clearTimeout(timer); ws.close(); reject(new Error(j.error.message || "Deriv")); return; }
-          if (j.msg_type === "candles" && j.candles && j.candles.length) {
-            clearTimeout(timer); ws.close();
-            resolve(j.candles.map((c) => ({ t: c.epoch, o: +c.open, h: +c.high, l: +c.low, c: +c.close })));
-          }
-        };
-        ws.onerror = () => { clearTimeout(timer); reject(new Error("websocket")); };
-      });
-    } catch (e) {
-      if (attempt >= 3) throw e;
-      await sleep(800 * attempt);
+    try { return await askDeriv(symbol, granularity); }
+    catch (e) {
+      if (derivWs) { try { derivWs.close(); } catch (err) {} derivWs = null; }
+      if (attempt >= 2) throw e;
+      await sleep(400);
     }
   }
 }
@@ -217,22 +240,18 @@ async function scan() {
   btn.textContent = "Lecture…";
   const spec = styleById(styleId);
   $("#status").textContent = `Lecture des prix : 0 sur ${MARKETS.length}`;
-  const out = new Array(MARKETS.length);
-  let cursor = 0, done = 0;
-  const worker = async () => {
-    while (cursor < MARKETS.length) {
-      const i = cursor++;
-      const mk = MARKETS[i];
-      try { out[i] = evaluate(mk, await fetchOHLC(mk.id, spec.step), Date.now() / 1000, spec, manual); }
-      catch (e) { out[i] = evaluate(mk, null, Date.now() / 1000, spec, manual); }
-      done++;
-      if (token === gen) $("#status").textContent = `Lecture des prix : ${done} sur ${MARKETS.length}`;
-    }
-  };
-  await Promise.all(Array.from({ length: 4 }, worker));
+  const out = [];
+  for (let i = 0; i < MARKETS.length; i++) {
+    if (token !== gen) return;
+    const mk = MARKETS[i];
+    try { out[i] = evaluate(mk, await fetchOHLC(mk.id, spec.step), Date.now() / 1000, spec, manual); }
+    catch (e) { out[i] = evaluate(mk, null, Date.now() / 1000, spec, manual); }
+    reports = out.filter(Boolean);
+    scannedAt = Date.now();
+    $("#status").textContent = `Lecture des prix : ${i + 1} sur ${MARKETS.length}`;
+    render(i === 0);
+  }
   if (token !== gen) return;
-  reports = out.filter(Boolean);
-  scannedAt = Date.now();
   busy = false;
   btn.disabled = false;
   btn.textContent = "Actualiser";
