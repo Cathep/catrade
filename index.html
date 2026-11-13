@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20">
+<link rel="stylesheet" href="style.css?v=21">
 </head>
 <body>
 <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -36,9 +36,9 @@
     </div>
     <p class="stack" id="stack"></p>
     <ul class="rules">
-      <li><b>W</b> sortie au cou</li>
-      <li><b>3 stops</b> pour 1 cou</li>
-      <li><b>On laisse</b> breakout et palier</li>
+      <li><b>Premier cinquième</b> du chemin</li>
+      <li><b>Sortie</b> au cou</li>
+      <li><b>On ne bouge pas</b> le stop</li>
     </ul>
     <div class="seg families" id="families" role="group" aria-label="Famille"></div>
     <div class="names" id="names"></div>
@@ -56,9 +56,9 @@
         <summary>Quatre gestes</summary>
         <ol>
           <li>Choisis le style. La lecture suit l'ordre du cours : grande unité, puis celle du milieu, puis la petite.</li>
-          <li>Une fiche est un W mûr. Tu places l'ordre toi-même, chez Deriv, sortie au cou.</li>
-          <li>Compte environ un cou pour trois stops. On ne rapproche pas le stop avant le cou.</li>
-          <li>Le choix « je prends » ou « je passe » reste sur cet appareil. Rien n'est envoyé à un courtier.</li>
+          <li>Une fiche n'existe que si le prix est encore dans le premier cinquième du chemin vers le cou. Tu places l'ordre limite sur la ligne, chez Deriv.</li>
+          <li>Le cas le plus fréquent est le stop. On ne le rapproche pas : sinon le cou ne paie plus les stops.</li>
+          <li>Préfère le scalping. Le day est le même W, avec moins de cas. Rien n'est envoyé à un courtier.</li>
         </ol>
       </details>
       <details class="fold">
@@ -70,26 +70,26 @@
       <h3 class="sec">Les règles</h3>
       <dl class="lex">
         <dt>W</dt>
-        <dd>Entrée près du second creux ou sommet, encore lent. Sortie au cou. On ne coupe pas avant.</dd>
+        <dd>Entrée seulement dans le premier cinquième du chemin, second creux ou sommet encore lent. Ce cinquième est un placement : le cours dit « le plus près possible », dans les 30 % au plus. Sortie au cou.</dd>
         <dt>Ce qu'on ne propose plus</dt>
-        <dd>Breakout et palier : sur l'historique récent, le stop partait avant l'objectif. On les laisse.</dd>
+        <dd>Breakout et palier : le stop partait avant l'objectif. Élargir le stop du W relève le nombre de réussites et efface le gain.</dd>
         <dt>On laisse</dt>
-        <dd>Mouvement difficile, W déjà parti vers le cou, sens contraire à la grande unité.</dd>
+        <dd>Prix déjà sorti du premier cinquième, sens contraire à la grande unité, unité swing.</dd>
       </dl>
     </section>
   </div>
   <footer class="note glass">CATRADE. W lent, sortie au cou. Aucun ordre n'est passé d'ici. Icône sur l'iPhone : Safari, Partager, Sur l'écran d'accueil.</footer>
   <div class="alertbox glass">
     <div>
-      <p>Un W se sort au cou. On ne rapproche pas le stop avant : le cou est loin, et le couper trop tôt mange le gain.</p>
+      <p>Un W se prend dans le premier cinquième du chemin, et se sort au cou. On ne rapproche pas le stop : le cas le plus fréquent est un stop, et le cou paie les stops.</p>
       <p>Dans l'appli ntfy, abonne-toi au sujet <b class="topic" id="topic">catrade-a8e3f19c4d</b>.</p>
     </div>
     <button class="btn" id="copyTopic" type="button">Copier le sujet</button>
     <button class="btn" id="notif" type="button">Alerter dans cette page</button>
   </div>
 </div>
-<script src="engine.js?v=40"></script>
-<script src="app.js?v=40"></script>
+<script src="engine.js?v=41"></script>
+<script src="app.js?v=41"></script>
 <script>
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
 </script>

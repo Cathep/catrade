@@ -484,7 +484,7 @@ function courseCard(r, plan, i) {
       <div><dt>Stop</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${esc(distText(mk, plan.dist))}</span></div>
       <div><dt>Sortie</dt><dd class="tp">${fmt(plan.tp, mk.dp)}</dd><span>le cou</span></div>
     </dl>
-    <p class="stack">On tient jusqu'au cou. Environ un objectif pour trois stops. ${esc(spec.stack)}</p>
+    <p class="stack">On tient jusqu'au cou, sans rapprocher le stop. Le stop est le cas le plus fréquent : le cou paie plusieurs stops. ${esc(spec.stack)}</p>
     ${actions}
   </article>`;
 }
@@ -496,7 +496,7 @@ function render(fresh) {
   const rest = reports.filter((r) => !plans.some((p) => p.r.id === r.id));
   const grid = $("#grid");
   grid.className = fresh ? "grid fresh" : "grid";
-  grid.innerHTML = plans.length ? plans.map((x, i) => courseCard(x.r, x.plan, i)).join("") : `<div class="glass empty">${!reports.length || busy ? "Lecture en cours." : "Aucun W mûr. Trop loin du creux, ou déjà parti vers le cou."}</div>`;
+  grid.innerHTML = plans.length ? plans.map((x, i) => courseCard(x.r, x.plan, i)).join("") : `<div class="glass empty">${!reports.length || busy ? "Lecture en cours." : "Aucun W mûr. Au-delà du premier cinquième vers le cou, ou à contre-sens : on laisse."}</div>`;
   const othersTitle = document.querySelector("summary.sec");
   if (othersTitle) othersTitle.textContent = rest.length ? `Les autres · ${rest.length}` : "Les autres";
   $("#others").innerHTML = rest.length ? rest.map((r) => {
@@ -511,7 +511,7 @@ function render(fresh) {
     return `<a class="namechip${ripe ? " on" : ""}" href="#m-${esc(r.id)}">${esc(mk.name)}</a>`;
   }).join("");
   $("#headline").textContent = !reports.length ? "Lecture des marchés…" : reports.every((r) => r.state === "erreur") ? "Prix illisibles." : plans.length ? `${plans.length} W mûr${plans.length > 1 ? "s" : ""}.` : "Aucun W mûr pour l'instant.";
-  $("#sub").textContent = !reports.length ? "Les fiches arrivent dès que les prix sont lus." : reports.every((r) => r.state === "erreur") ? "La source des prix ne répond pas. Réessayez." : "Seuls les W lents, encore près du creux ou du sommet. Sortie au cou. Aucun ordre n'est envoyé.";
+  $("#sub").textContent = !reports.length ? "Les fiches arrivent dès que les prix sont lus." : reports.every((r) => r.state === "erreur") ? "La source des prix ne répond pas. Réessayez." : "W lent, encore dans le premier cinquième du chemin vers le cou. Aucun ordre n'est envoyé.";
 }
 
 function paintChrome() {
@@ -570,7 +570,7 @@ function maxwellPlan(r) {
   const span = p.dir > 0 ? p.neck - p.ext1 : p.ext1 - p.neck;
   if (!(span > 0)) return null;
   const progress = p.dir > 0 ? (r.price - p.ext1) / span : (p.ext1 - r.price) / span;
-  if (!(progress >= 0 && progress <= 0.3)) return null;
+  if (!(progress >= 0 && progress <= 0.2)) return null;
   const pad = (r.atr || 0) * 0.12;
   const sl = p.dir > 0 ? Math.min(p.ext1, p.ext2) - pad : Math.max(p.ext1, p.ext2) + pad;
   if (p.dir > 0 ? r.price <= sl : r.price >= sl) return null;

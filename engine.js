@@ -24,6 +24,8 @@ var CT = (() => {
     MARKETS: () => MARKETS,
     STYLES: () => STYLES,
     breakoutOf: () => breakoutOf,
+    collectBars: () => collectBars,
+    collectW: () => collectW,
     coursePlan: () => coursePlan,
     distText: () => distText,
     evaluate: () => evaluate,
@@ -441,7 +443,7 @@ var CT = (() => {
     const span = p.dir > 0 ? p.neck - p.ext1 : p.ext1 - p.neck;
     if (!(span > 0)) return null;
     const progress = p.dir > 0 ? (r.price - p.ext1) / span : (p.ext1 - r.price) / span;
-    if (!(progress >= 0 && progress <= 0.3)) return null;
+    if (!(progress >= 0 && progress <= 0.2)) return null;
     const pad = (r.atr || 0) * 0.12;
     const sl = p.dir > 0 ? Math.min(p.ext1, p.ext2) - pad : Math.max(p.ext1, p.ext2) + pad;
     if (p.dir > 0 ? r.price <= sl : r.price >= sl) return null;
@@ -540,7 +542,7 @@ var CT = (() => {
       reward: Math.abs(simple.neck - simple.ref),
       step: 0,
       key: simple.key,
-      note: "Sortir au cou. On ne rapproche pas le stop avant : \xE7a coupe le gain."
+      note: "Sortir au cou. Le prix est encore dans le premier cinqui\xE8me du chemin. On ne rapproche pas le stop avant."
     };
   }
   function gestionAt(plan, q) {
@@ -696,6 +698,140 @@ var CT = (() => {
         atMarket: atMarket?.raw ?? null
       });
       i = (timed?.raw.at ?? fill) + 1;
+    }
+    return out;
+  }
+  function collectW(mk, raw, style, now = Date.now() / 1e3) {
+    if (!raw || raw.length < style.warm + 30) return [];
+    const last = raw[raw.length - 1];
+    const closed = last.t + style.step > now ? raw.slice(0, -1) : raw;
+    if (closed.length < style.warm + 20) return [];
+    const P = prepare(closed, style);
+    const weekend = mk.cls === "fx" || mk.cls === "gold";
+    const mid = P.k[Math.floor(P.k.length / 2)]?.t ?? 0;
+    const out = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (let i = style.warm; i < P.k.length - 2; i++) {
+      const bar = P.k[i];
+      if (weekend && fxBlocked(bar.t + style.step)) continue;
+      const price = bar.c;
+      const jg = judgeAt(P, i, style, true, price);
+      const p = jg.pattern;
+      if (!p || !p.slow || !p.secondPart || p.tpHit || p.tooFar) continue;
+      if (seen.has(p.key)) continue;
+      const span = p.dir > 0 ? p.neck - p.ext1 : p.ext1 - p.neck;
+      if (!(span > 0) || !(jg.atr && jg.atr > 0)) continue;
+      const progress = p.dir > 0 ? (price - p.ext1) / span : (p.ext1 - price) / span;
+      if (!(progress >= -0.05 && progress <= 0.55)) continue;
+      seen.add(p.key);
+      const vr = jg.vr ?? volRatio(P.k, i);
+      const agite = jg.verdict === "NO_TRADE" && jg.reasonCode === "MOVEMENT_NOT_CLEAR" && vr != null && vr > 2.15;
+      const lows = [];
+      const highs = [];
+      const closes = [];
+      const end = Math.min(P.k.length, i + 1 + 120);
+      for (let j = i + 1; j < end; j++) {
+        lows.push(P.k[j].l);
+        highs.push(P.k[j].h);
+        closes.push(P.k[j].c);
+      }
+      out.push({
+        id: mk.id,
+        sym: mk.sym,
+        t: bar.t,
+        half: bar.t < mid ? 0 : 1,
+        dir: p.dir,
+        ext1: p.ext1,
+        ext2: p.ext2,
+        neck: p.neck,
+        atr: jg.atr,
+        price,
+        progress,
+        slow: p.slow,
+        second: p.secondPart,
+        slHit: p.slHit,
+        age: i - p.i2,
+        sep: p.i2 - p.i1,
+        vr,
+        blocked: agite || jg.reasonCode === "LOCAL_AGAINST_CONTEXT",
+        lows,
+        highs,
+        closes
+      });
+    }
+    return out;
+  }
+  function collectBars(mk, raw, style, now = Date.now() / 1e3) {
+    if (!raw || raw.length < style.warm + 30) return [];
+    const last = raw[raw.length - 1];
+    const closed = last.t + style.step > now ? raw.slice(0, -1) : raw;
+    if (closed.length < style.warm + 20) return [];
+    const P = prepare(closed, style);
+    const weekend = mk.cls === "fx" || mk.cls === "gold";
+    const out = [];
+    for (let i = style.warm; i < P.k.length - 2; i++) {
+      const bar = P.k[i];
+      if (weekend && fxBlocked(bar.t + style.step)) continue;
+      const price = bar.c;
+      const jg = judgeAt(P, i, style, true, price);
+      const p = jg.pattern;
+      if (!p || !p.slow || !p.secondPart || p.tpHit || p.tooFar) continue;
+      const span = p.dir > 0 ? p.neck - p.ext1 : p.ext1 - p.neck;
+      if (!(span > 0) || !(jg.atr && jg.atr > 0)) continue;
+      const progress = p.dir > 0 ? (price - p.ext1) / span : (p.ext1 - price) / span;
+      const worse = p.dir > 0 ? Math.min(p.ext1, p.ext2) : Math.max(p.ext1, p.ext2);
+      let neckAt = p.i1;
+      let neckPx = p.dir > 0 ? -Infinity : Infinity;
+      for (let j = p.i1; j <= p.i2; j++) {
+        const c = P.k[j];
+        if (p.dir > 0 ? c.h >= neckPx : c.l <= neckPx) {
+          neckPx = p.dir > 0 ? c.h : c.l;
+          neckAt = j;
+        }
+      }
+      let adverse = 0;
+      let neckHit = false;
+      for (let j = p.i2; j <= i; j++) {
+        const c = P.k[j];
+        if (p.dir > 0) adverse = Math.max(adverse, worse - c.l);
+        else adverse = Math.max(adverse, c.h - worse);
+      }
+      for (let j = neckAt + 1; j <= i; j++) {
+        const c = P.k[j];
+        if (p.dir > 0 ? c.h >= p.neck : c.l <= p.neck) neckHit = true;
+      }
+      if (p.dir > 0) {
+        adverse = Math.max(adverse, worse - price);
+        if (price >= p.neck) neckHit = true;
+      } else {
+        adverse = Math.max(adverse, price - worse);
+        if (price <= p.neck) neckHit = true;
+      }
+      const vr = jg.vr ?? volRatio(P.k, i);
+      const agite = jg.verdict === "NO_TRADE" && jg.reasonCode === "MOVEMENT_NOT_CLEAR" && vr != null && vr > 2.15;
+      const ctx = P.ctx[i];
+      out.push({
+        i,
+        t: bar.t,
+        dir: p.dir,
+        ext1: p.ext1,
+        ext2: p.ext2,
+        neck: p.neck,
+        atr: jg.atr,
+        price,
+        progress,
+        slHit: p.slHit,
+        adverse,
+        neckHit,
+        age: i - p.i2,
+        sep: p.i2 - p.i1,
+        vr,
+        blocked: agite || jg.reasonCode === "LOCAL_AGAINST_CONTEXT",
+        choppy: jg.reasonCode === "MOVEMENT_NOT_CLEAR",
+        flat: ctx == null || ctx === 0,
+        barAtr: (bar.h - bar.l) / jg.atr,
+        key: p.key
+      });
     }
     return out;
   }
