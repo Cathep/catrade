@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "66";
+const BUILD = "67";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -644,12 +644,35 @@ function courseCard(r, plan, i) {
   </article>`;
 }
 
+function reactionText(r, tf) {
+  const zones = (r.zones || []).filter((z) => z.role === "directeur" && z.top > z.bottom);
+  const bar = (r.candles || [])[(r.candles || []).length - 1];
+  if (!bar || r.price == null || !zones.length) return "";
+  const span = (z) => z.top - z.bottom;
+  const touched = zones.filter((z) => bar.l <= z.top && bar.h >= z.bottom);
+  const near = zones.find((z) => r.price <= z.top + span(z) && r.price >= z.bottom - span(z));
+  const zone = touched[0] || near;
+  if (!zone) return "";
+  const range = bar.h - bar.l;
+  const body = Math.abs(bar.c - bar.o);
+  const decided = range > 0 && body >= range * 0.55;
+  const holdUp = bar.c > bar.o && bar.l <= zone.top && bar.c >= zone.top;
+  const holdDown = bar.c < bar.o && bar.h >= zone.bottom && bar.c <= zone.bottom;
+  const broke = (bar.c < zone.bottom && bar.o >= zone.bottom) || (bar.c > zone.top && bar.o <= zone.top);
+  const unit = tf || "H1";
+  if (decided && holdUp) return `Bougie ${unit} déterminée, sens montant. À confirmer encore en M15, M30 ou M5.`;
+  if (decided && holdDown) return `Bougie ${unit} déterminée, sens descendant. À confirmer encore en M15, M30 ou M5.`;
+  if (decided && broke) return `La bougie ${unit} a cassé la zone. Ce n'est pas un maintien.`;
+  return `Zone de réaction en ${unit}. J'attends la bougie : elle peut tenir, ou casser.`;
+}
+
 function zoneCard(r, i) {
   const mk = MARKETS.find((m) => m.id === r.id);
   const spec = styleById(styleId);
+  const wait = reactionText(r, spec.tf);
   return `<article class="card glass" id="m-${esc(r.id)}" style="--i:${i}">
     <div class="head"><div><p class="name">${esc(mk.name)}<span class="buf">${esc(spec.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div></div>
-    <p class="subcall">${esc(r.reason || "Pas de W mûr.")}</p>
+    <p class="subcall">${esc(wait || r.reason || "Pas de W mûr.")}</p>
     ${chart(r, null)}
     <p class="legend"><span><i class="zn entz"></i>zone du W</span><span><i class="zn dirz"></i>niveau</span><span><i class="ln tpn"></i>cou</span></p>
   </article>`;
