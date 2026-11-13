@@ -502,7 +502,12 @@ async function scan() {
     const batch = list.slice(i, i + 3);
     await Promise.all(batch.map(async (mk, k) => {
       const idx = i + k;
-      try { out[idx] = evaluate(mk, await fetchOHLC(mk.id, spec.step), Date.now() / 1000, spec, manual); }
+      try {
+        const bars = await fetchOHLC(mk.id, spec.step);
+        const row = evaluate(mk, bars, Date.now() / 1000, spec, manual);
+        row.bars = bars;
+        out[idx] = row;
+      }
       catch (e) { out[idx] = evaluate(mk, null, Date.now() / 1000, spec, manual); }
     }));
     reports = out.filter(Boolean);
@@ -540,23 +545,103 @@ function maxwellPlan(r) {
   return { ref: p.ext1, neck: p.neck, sl, dist };
 }
 
+function youngTrend(k, dir) {
+  const highs = [];
+  const lows = [];
+  const wing = 3;
+  const start = Math.max(wing, k.length - 160);
+  for (let i = start; i < k.length - wing; i++) {
+    let hi = true;
+    let lo = true;
+    for (let j = i - wing; j <= i + wing; j++) {
+      if (j === i) continue;
+      if (k[j].h >= k[i].h) hi = false;
+      if (k[j].l <= k[i].l) lo = false;
+    }
+    if (hi) highs.push(i);
+    if (lo) lows.push(i);
+  }
+  if (dir > 0) {
+    for (let n = lows.length - 2; n >= 1; n--) {
+      const prev = lows[n - 1];
+      const turn = lows[n];
+      const next = lows[n + 1];
+      if (!(k[prev].l > k[turn].l && k[next].l > k[turn].l)) continue;
+      const before = highs.filter((i) => i < turn && i > turn - 120);
+      if (!before.length || !highs.some((i) => i > turn)) continue;
+      const origin = before.reduce((a, b) => (k[a].h >= k[b].h ? a : b));
+      const floor = k[turn].l;
+      const objective = k[origin].h;
+      if (!(objective > floor)) continue;
+      const levels = lows.filter((i) => i > origin && i < turn).map((i) => k[i].l).filter((px) => px > floor && px < objective);
+      return { floor, objective, levels };
+    }
+  } else {
+    for (let n = highs.length - 2; n >= 1; n--) {
+      const prev = highs[n - 1];
+      const turn = highs[n];
+      const next = highs[n + 1];
+      if (!(k[prev].h < k[turn].h && k[next].h < k[turn].h)) continue;
+      const before = lows.filter((i) => i < turn && i > turn - 120);
+      if (!before.length || !lows.some((i) => i > turn)) continue;
+      const origin = before.reduce((a, b) => (k[a].l <= k[b].l ? a : b));
+      const floor = k[turn].h;
+      const objective = k[origin].l;
+      if (!(objective < floor)) continue;
+      const levels = highs.filter((i) => i > origin && i < turn).map((i) => k[i].h).filter((px) => px < floor && px > objective);
+      return { floor, objective, levels };
+    }
+  }
+  return null;
+}
+
+function trendPlan(r) {
+  const simple = maxwellPlan(r);
+  const p = r.pattern;
+  if (!simple || !p || !r.bars || r.bars.length < 40) return null;
+  const trend = youngTrend(r.bars, p.dir);
+  if (!trend) return null;
+  const span = Math.abs(trend.objective - trend.floor);
+  const progress = p.dir > 0 ? (r.price - trend.floor) / span : (trend.floor - r.price) / span;
+  if (!(progress >= 0 && progress < 0.8)) return null;
+  if (p.dir > 0 ? trend.objective <= simple.ref : trend.objective >= simple.ref) return null;
+  const reward = Math.abs(trend.objective - simple.ref);
+  if (!(reward > simple.dist)) return null;
+  const band = span * 0.08;
+  let near = false;
+  let passed = 0;
+  for (const lv of trend.levels) {
+    if (Math.abs(simple.ref - lv) <= band) near = true;
+    else if (p.dir > 0 ? lv < simple.ref - band : lv > simple.ref + band) passed++;
+  }
+  const base = { ref: simple.ref, sl: simple.sl, dist: simple.dist, tp: trend.objective, reward, progress };
+  if (near) return { ...base, kind: "PALIER", step: passed + 1 };
+  if (progress <= 0.3) return { ...base, kind: "TENDANCE", step: 1 };
+  return null;
+}
+
 function alertLive() {
   const spec = styleById(styleId);
-  if (spec.id === "swing") return;
   const seen = store.get("ct.ntfy", {});
   let changed = false;
   for (const r of reports) {
-    const plan = maxwellPlan(r);
+    const trend = spec.id === "scalping" ? null : trendPlan(r);
+    const simple = spec.id === "swing" ? null : maxwellPlan(r);
+    const plan = trend || (simple ? { kind: "W", ref: simple.ref, sl: simple.sl, dist: simple.dist, tp: simple.neck, reward: Math.abs(simple.neck - simple.ref) } : null);
     if (!plan || !r.pattern) continue;
-    const key = `${r.id}:${styleId}:${r.pattern.key}`;
+    const key = `${plan.kind}:${r.id}:${styleId}:${r.pattern.key}`;
     if (seen[key]) continue;
     seen[key] = Date.now();
     changed = true;
     const mk = MARKETS.find((m) => m.id === r.id);
     const sens = r.dir < 0 ? "SELL" : "BUY";
     const pct = pctText(r);
-    const title = `${sens} ${pct} ${mk.name}`;
-    const body = [sens, pct, `${spec.label} ${spec.tf}`, "Second creux lent, deuxième partie", `Entrée ${fmt(plan.ref, mk.dp)}`, `SL ${fmt(plan.sl, mk.dp)}`, `TP ${fmt(plan.neck, mk.dp)}`, "Sortir au cou. Pas d'objectif plus loin."].join("\n");
+    const title = `${sens} ${plan.kind} ${pct} ${mk.name}`;
+    const lines = [sens, plan.kind, pct, `${spec.label} ${spec.tf}`, `Entrée ${fmt(plan.ref, mk.dp)}`, `SL ${fmt(plan.sl, mk.dp)}`, `TP ${fmt(plan.tp, mk.dp)}`];
+    if (plan.kind === "W") lines.push("Sortir au cou. Pas d'objectif plus loin.");
+    else if (plan.kind === "PALIER") lines.push(`Palier ${plan.step}. Lot inférieur ou égal au précédent.`, "Garder jusqu'à l'objectif.");
+    else lines.push("Une seule entrée sur cette tendance.", "Garder jusqu'à l'objectif.");
+    const body = lines.join("\n");
     if (store.get("ct.notif", false) && "Notification" in window && Notification.permission === "granted") {
       try { new Notification(title, { body, tag: key }); } catch (e) {}
     }

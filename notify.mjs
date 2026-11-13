@@ -121,6 +121,81 @@ function maxwellPlan(r) {
   return { ref: p.ext1, neck: p.neck, sl, dist };
 }
 
+function youngTrend(k, dir) {
+  const highs = [];
+  const lows = [];
+  const wing = 3;
+  const start = Math.max(wing, k.length - 160);
+  for (let i = start; i < k.length - wing; i++) {
+    let hi = true;
+    let lo = true;
+    for (let j = i - wing; j <= i + wing; j++) {
+      if (j === i) continue;
+      if (k[j].h >= k[i].h) hi = false;
+      if (k[j].l <= k[i].l) lo = false;
+    }
+    if (hi) highs.push(i);
+    if (lo) lows.push(i);
+  }
+  if (dir > 0) {
+    for (let n = lows.length - 2; n >= 1; n--) {
+      const prev = lows[n - 1];
+      const turn = lows[n];
+      const next = lows[n + 1];
+      if (!(k[prev].l > k[turn].l && k[next].l > k[turn].l)) continue;
+      const before = highs.filter((i) => i < turn && i > turn - 120);
+      if (!before.length || !highs.some((i) => i > turn)) continue;
+      const origin = before.reduce((a, b) => (k[a].h >= k[b].h ? a : b));
+      const floor = k[turn].l;
+      const objective = k[origin].h;
+      if (!(objective > floor)) continue;
+      const levels = lows.filter((i) => i > origin && i < turn).map((i) => k[i].l).filter((px) => px > floor && px < objective);
+      return { floor, objective, levels };
+    }
+  } else {
+    for (let n = highs.length - 2; n >= 1; n--) {
+      const prev = highs[n - 1];
+      const turn = highs[n];
+      const next = highs[n + 1];
+      if (!(k[prev].h < k[turn].h && k[next].h < k[turn].h)) continue;
+      const before = lows.filter((i) => i < turn && i > turn - 120);
+      if (!before.length || !lows.some((i) => i > turn)) continue;
+      const origin = before.reduce((a, b) => (k[a].l <= k[b].l ? a : b));
+      const floor = k[turn].h;
+      const objective = k[origin].l;
+      if (!(objective < floor)) continue;
+      const levels = highs.filter((i) => i > origin && i < turn).map((i) => k[i].h).filter((px) => px < floor && px > objective);
+      return { floor, objective, levels };
+    }
+  }
+  return null;
+}
+
+function trendPlan(r, bars) {
+  const simple = maxwellPlan(r);
+  const p = r.pattern;
+  if (!simple || !p || !bars || bars.length < 40) return null;
+  const trend = youngTrend(bars, p.dir);
+  if (!trend) return null;
+  const span = Math.abs(trend.objective - trend.floor);
+  const progress = p.dir > 0 ? (r.price - trend.floor) / span : (trend.floor - r.price) / span;
+  if (!(progress >= 0 && progress < 0.8)) return null;
+  if (p.dir > 0 ? trend.objective <= simple.ref : trend.objective >= simple.ref) return null;
+  const reward = Math.abs(trend.objective - simple.ref);
+  if (!(reward > simple.dist)) return null;
+  const band = span * 0.08;
+  let near = false;
+  let passed = 0;
+  for (const lv of trend.levels) {
+    if (Math.abs(simple.ref - lv) <= band) near = true;
+    else if (p.dir > 0 ? lv < simple.ref - band : lv > simple.ref + band) passed++;
+  }
+  const base = { ref: simple.ref, sl: simple.sl, dist: simple.dist, tp: trend.objective, reward, progress };
+  if (near) return { ...base, kind: "PALIER", step: passed + 1 };
+  if (progress <= 0.3) return { ...base, kind: "TENDANCE", step: 1 };
+  return null;
+}
+
 const markets = MARKETS;
 const cache = new Map();
 const ws = await openDeriv();
@@ -143,25 +218,22 @@ try {
         await sleep(700);
       }
       const r = evaluate(mk, bars, now, style, true);
-      const plan = maxwellPlan(r);
-      if (!plan) continue;
-      const id = `${mk.id}:${style.id}:${r.pattern.key}`;
+      const trend = style.id === "scalping" ? null : trendPlan(r, bars);
+      const simple = style.id === "swing" ? null : maxwellPlan(r);
+      const plan = trend || (simple ? { kind: "W", ref: simple.ref, sl: simple.sl, dist: simple.dist, tp: simple.neck, reward: Math.abs(simple.neck - simple.ref), step: 0 } : null);
+      if (!plan || !r.pattern) continue;
+      const id = `${plan.kind}:${mk.id}:${style.id}:${r.pattern.key}`;
       if (seen.has(id)) continue;
       const sell = r.dir < 0;
       const sens = sell ? "SELL" : "BUY";
       const pct = pctText(r);
-      const title = `${sens} ${pct} ${mk.name}`;
-      const body = [
-        sens,
-        pct,
-        `${style.label} ${style.tf}`,
-        "Second creux lent, deuxième partie",
-        `Entrée ${fmt(plan.ref, mk.dp)}`,
-        `SL ${fmt(plan.sl, mk.dp)} (${distText(mk, plan.dist)})`,
-        `TP ${fmt(plan.neck, mk.dp)} (${distText(mk, Math.abs(plan.neck - plan.ref))})`,
-        "Sortir au cou. Pas d'objectif plus loin.",
-        `Fermer au plus tard ${deadline(now, style)}.`,
-      ].join("\n");
+      const title = `${sens} ${plan.kind} ${pct} ${mk.name}`;
+      const lines = [sens, plan.kind, pct, `${style.label} ${style.tf}`, `Entrée ${fmt(plan.ref, mk.dp)}`, `SL ${fmt(plan.sl, mk.dp)} (${distText(mk, plan.dist)})`, `TP ${fmt(plan.tp, mk.dp)} (${distText(mk, plan.reward)})`];
+      if (plan.kind === "W") lines.push("Sortir au cou. Pas d'objectif plus loin.");
+      else if (plan.kind === "PALIER") lines.push(`Palier ${plan.step}. Lot inférieur ou égal au précédent.`, "Garder jusqu'à l'objectif. Fermer si le prix se retourne avant.");
+      else lines.push("Une seule entrée sur cette tendance.", "Garder jusqu'à l'objectif.");
+      lines.push(`Fermer au plus tard ${deadline(now, style)}.`);
+      const body = lines.join("\n");
       await publish(title, body, sell);
       seen.add(id);
       sent++;
