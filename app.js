@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "56";
+const BUILD = "57";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -766,6 +766,7 @@ function alertLive() {
       `SL ${fmt(plan.sl, mk.dp)}`,
       `Sortie ${fmt(plan.tp, mk.dp)}`,
       plan.note,
+      `SUIVI ${r.id} ${styleId} ${plan.dir} ${plan.ref} ${plan.sl} ${plan.tp}`,
       "On tient jusqu'au cou. On ne rapproche pas le stop avant.",
     ].join("\n");
     if (store.get("ct.notif", false) && "Notification" in window && Notification.permission === "granted") {
