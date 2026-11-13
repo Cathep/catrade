@@ -535,9 +535,9 @@ var CT = (() => {
     const pad = (r.atr || 0) * 0.12;
     const sl = p.dir > 0 ? Math.min(p.ext1, p.ext2) - pad : Math.max(p.ext1, p.ext2) + pad;
     if (p.dir > 0 ? r.price <= sl : r.price >= sl) return null;
-    const dist = Math.abs(p.ext1 - sl);
+    const dist = Math.abs(r.price - sl);
     if (!(dist > 0)) return null;
-    return { ref: p.ext1, neck: p.neck, sl, dist, dir: p.dir, key: p.key };
+    return { ref: r.price, neck: p.neck, sl, dist, dir: p.dir, key: p.key };
   }
   function breakoutOf(r) {
     const k = r.series;
@@ -752,7 +752,8 @@ var CT = (() => {
         continue;
       }
       skip = plan.key;
-      if (plan.kind === "ZONE") {
+      const here = P.k[i].c;
+      if (here === plan.ref) {
         const taken = simulateTrade(P.k, i + 1, plan.dir, plan.ref, plan.sl, plan.tp, style.maxBars, mk.cost);
         const held = simulateTrade(P.k, i + 1, plan.dir, plan.ref, plan.sl, plan.tp, 120, mk.cost);
         out.push({
@@ -762,7 +763,7 @@ var CT = (() => {
           raw: taken?.raw ?? null,
           managed: taken?.managed ?? null,
           held: held?.raw ?? null,
-          atMarket: null
+          atMarket: taken?.raw ?? null
         });
         i = (taken?.raw.at ?? i) + 1;
         continue;
