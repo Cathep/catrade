@@ -298,8 +298,13 @@ button { font: inherit; color: inherit; }
   word-break: break-all;
 }
 
-.hero-top .status {
+.status {
   margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+.hero-top .status {
   text-align: right;
   max-width: 16rem;
 }
