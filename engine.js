@@ -23,6 +23,7 @@ var CT = (() => {
   __export(engine_exports, {
     MARKETS: () => MARKETS,
     STYLES: () => STYLES,
+    breakoutOf: () => breakoutOf,
     coursePlan: () => coursePlan,
     distText: () => distText,
     evaluate: () => evaluate,
@@ -31,6 +32,8 @@ var CT = (() => {
     lotLoss: () => lotLoss,
     patternPlan: () => patternPlan,
     proposeLevels: () => proposeLevels,
+    replayCourse: () => replayCourse,
+    simulateTrade: () => simulateTrade,
     styleById: () => styleById
   });
   var STYLES = [
@@ -446,55 +449,6 @@ var CT = (() => {
     if (!(dist > 0)) return null;
     return { ref: p.ext1, neck: p.neck, sl, dist, dir: p.dir, key: p.key };
   }
-  function youngTrend(k, dir) {
-    const highs = [];
-    const lows = [];
-    const wing = 3;
-    const start = Math.max(wing, k.length - 160);
-    for (let i = start; i < k.length - wing; i++) {
-      let hi = true;
-      let lo = true;
-      for (let j = i - wing; j <= i + wing; j++) {
-        if (j === i) continue;
-        if (k[j].h >= k[i].h) hi = false;
-        if (k[j].l <= k[i].l) lo = false;
-      }
-      if (hi) highs.push(i);
-      if (lo) lows.push(i);
-    }
-    if (dir > 0) {
-      for (let n = lows.length - 2; n >= 1; n--) {
-        const prev = lows[n - 1];
-        const turn = lows[n];
-        const next = lows[n + 1];
-        if (!(k[prev].l > k[turn].l && k[next].l > k[turn].l)) continue;
-        const before = highs.filter((i) => i < turn && i > turn - 120);
-        if (!before.length || !highs.some((i) => i > turn)) continue;
-        const origin = before.reduce((a, b) => k[a].h >= k[b].h ? a : b);
-        const floor = k[turn].l;
-        const objective = k[origin].h;
-        if (!(objective > floor)) continue;
-        const levels = lows.filter((i) => i > origin && i < turn).map((i) => k[i].l).filter((px) => px > floor && px < objective);
-        return { floor, objective, levels };
-      }
-    } else {
-      for (let n = highs.length - 2; n >= 1; n--) {
-        const prev = highs[n - 1];
-        const turn = highs[n];
-        const next = highs[n + 1];
-        if (!(k[prev].h < k[turn].h && k[next].h < k[turn].h)) continue;
-        const before = lows.filter((i) => i < turn && i > turn - 120);
-        if (!before.length || !lows.some((i) => i > turn)) continue;
-        const origin = before.reduce((a, b) => k[a].l <= k[b].l ? a : b);
-        const floor = k[turn].h;
-        const objective = k[origin].l;
-        if (!(objective < floor)) continue;
-        const levels = highs.filter((i) => i > origin && i < turn).map((i) => k[i].h).filter((px) => px < floor && px > objective);
-        return { floor, objective, levels };
-      }
-    }
-    return null;
-  }
   function breakoutOf(r) {
     const k = r.series;
     if (!k || k.length < 50 || r.price == null || !(r.atr && r.atr > 0)) return null;
@@ -574,59 +528,176 @@ var CT = (() => {
     if (r.price == null || r.state === "agite" || r.state === "ferme" || r.state === "erreur") return null;
     if (r.reasonCode === "LOCAL_AGAINST_CONTEXT") return null;
     const simple = wSetup(r);
-    if (simple && style.id !== "scalping") {
-      const trend = youngTrend(r.series?.length ? r.series : r.candles, simple.dir);
-      if (trend) {
-        const span = Math.abs(trend.objective - trend.floor);
-        const progress = simple.dir > 0 ? (r.price - trend.floor) / span : (trend.floor - r.price) / span;
-        const reward = Math.abs(shyOf(simple.ref, trend.objective) - simple.ref);
-        if (progress >= 0 && progress < 0.8 && (simple.dir > 0 ? trend.objective > simple.ref : trend.objective < simple.ref) && reward > simple.dist) {
-          const band = span * 0.08;
-          let near = false;
-          let passed = 0;
-          for (const lv of trend.levels) {
-            if (Math.abs(simple.ref - lv) <= band) near = true;
-            else if (simple.dir > 0 ? lv < simple.ref - band : lv > simple.ref + band) passed++;
-          }
-          const tp = shyOf(simple.ref, trend.objective);
-          const base = {
-            dir: simple.dir,
-            ref: simple.ref,
-            sl: simple.sl,
-            dist: simple.dist,
-            tp,
-            objective: trend.objective,
-            reward: Math.abs(tp - simple.ref),
-            key: simple.key
-          };
-          if (near) {
-            return { ...base, kind: "PALIER", step: passed + 1, note: `Palier ${passed + 1}. Le lot reste inf\xE9rieur ou \xE9gal au pr\xE9c\xE9dent. La sortie est juste sous l'objectif.` };
-          }
-          if (progress <= 0.3) {
-            return { ...base, kind: "TENDANCE", step: 1, note: "Une seule entr\xE9e sur cette tendance. La sortie est juste sous l'objectif." };
-          }
-        }
-      }
-    }
-    if (simple && style.id !== "swing") {
-      return {
-        kind: "W",
-        dir: simple.dir,
-        ref: simple.ref,
-        sl: simple.sl,
-        dist: simple.dist,
-        tp: simple.neck,
-        objective: simple.neck,
-        reward: Math.abs(simple.neck - simple.ref),
-        step: 0,
-        key: simple.key,
-        note: "Sortir au cou. Pas d'objectif plus loin."
-      };
-    }
-    return breakoutOf(r);
+    if (!simple || style.id === "swing") return null;
+    return {
+      kind: "W",
+      dir: simple.dir,
+      ref: simple.ref,
+      sl: simple.sl,
+      dist: simple.dist,
+      tp: simple.neck,
+      objective: simple.neck,
+      reward: Math.abs(simple.neck - simple.ref),
+      step: 0,
+      key: simple.key,
+      note: "Sortir au cou. On ne rapproche pas le stop avant : \xE7a coupe le gain."
+    };
   }
   function gestionAt(plan, q) {
     return plan.ref + (plan.tp - plan.ref) * q;
+  }
+  function betterStop(dir, current, next) {
+    return dir > 0 ? Math.max(current, next) : Math.min(current, next);
+  }
+  function stoppedAt(dir, bar, stop) {
+    return dir > 0 ? bar.l <= stop : bar.h >= stop;
+  }
+  function reached(dir, bar, level) {
+    return dir > 0 ? bar.h >= level : bar.l <= level;
+  }
+  function simulateTrade(k, from, dir, entry, sl, tp, maxBars, costFrac) {
+    const risk = Math.abs(entry - sl);
+    if (!(risk > 0) || !(maxBars > 0) || from >= k.length) return null;
+    if (dir > 0 ? !(tp > entry) : !(tp < entry)) return null;
+    const costR = costFrac * entry / risk;
+    const rOf = (exit) => dir * (exit - entry) / risk - costR;
+    const last = Math.min(k.length - 1, from + maxBars - 1);
+    let raw = { end: "time", r: rOf(k[last].c), at: last };
+    for (let j = from; j <= last; j++) {
+      if (stoppedAt(dir, k[j], sl)) {
+        raw = { end: "sl", r: rOf(sl), at: j };
+        break;
+      }
+      if (reached(dir, k[j], tp)) {
+        raw = { end: "tp", r: rOf(tp), at: j };
+        break;
+      }
+    }
+    const p40 = gestionAt({ ref: entry, tp }, 0.4);
+    const p60 = gestionAt({ ref: entry, tp }, 0.6);
+    const p80 = gestionAt({ ref: entry, tp }, 0.8);
+    let stop = sl;
+    let managed = { end: "time", r: rOf(k[last].c), at: last };
+    for (let j = from; j <= last; j++) {
+      if (stoppedAt(dir, k[j], stop)) {
+        const end = Math.abs(stop - sl) <= risk * 0.02 ? "sl" : Math.abs(stop - entry) <= risk * 0.05 ? "be" : "gain";
+        managed = { end, r: rOf(stop), at: j };
+        break;
+      }
+      if (reached(dir, k[j], tp)) {
+        managed = { end: "tp", r: rOf(tp), at: j };
+        break;
+      }
+      if (reached(dir, k[j], p80)) {
+        managed = { end: "early", r: rOf(p80), at: j };
+        break;
+      }
+      if (reached(dir, k[j], p60)) stop = betterStop(dir, stop, p40);
+      else if (reached(dir, k[j], p40)) stop = betterStop(dir, stop, entry);
+    }
+    return { raw, managed };
+  }
+  function planAt(P, i, mk, style, weekend) {
+    const bar = P.k[i];
+    if (weekend && fxBlocked(bar.t + style.step)) return null;
+    const price = bar.c;
+    const jg = judgeAt(P, i, style, true, price);
+    const vr = jg.vr ?? volRatio(P.k, i);
+    let state = "avis";
+    if (jg.verdict === "NO_TRADE" && jg.reasonCode === "MOVEMENT_NOT_CLEAR" && vr != null && vr > 2.15) state = "agite";
+    else if (jg.verdict === "NO_TRADE") state = "refus";
+    const from = Math.max(0, i - 239);
+    const series = P.k.slice(from, i + 1);
+    const report = {
+      id: mk.id,
+      state,
+      why: null,
+      reasonCode: jg.reasonCode,
+      reason: jg.reason,
+      price,
+      spark: [],
+      candles: series.slice(-48),
+      series,
+      origin: 0,
+      pattern: jg.pattern,
+      opposed: jg.opposed,
+      notes: [],
+      levels: null,
+      dir: jg.dir,
+      buffer: 0,
+      manual: true,
+      verdict: jg.verdict,
+      record: { n: 0, wins: 0, avg: 0 },
+      vr,
+      atr: jg.atr,
+      days: 0,
+      tf: style.tf
+    };
+    return coursePlan(report, style);
+  }
+  function replayCourse(mk, raw, style, now = Date.now() / 1e3, only) {
+    if (!raw || raw.length < style.warm + 30) return [];
+    const last = raw[raw.length - 1];
+    const closed = last.t + style.step > now ? raw.slice(0, -1) : raw;
+    if (closed.length < style.warm + 20) return [];
+    const P = prepare(closed, style);
+    const weekend = mk.cls === "fx" || mk.cls === "gold";
+    const out = [];
+    let skip = "";
+    let i = style.warm;
+    const n = P.k.length;
+    while (i < n - 2) {
+      const plan = planAt(P, i, mk, style, weekend);
+      if (!plan || only && !only.includes(plan.kind) || plan.key === skip) {
+        i++;
+        continue;
+      }
+      skip = plan.key;
+      const look = Math.min(n - 1, i + style.maxBars);
+      let fill = null;
+      let sameBar = null;
+      for (let j = i + 1; j <= look; j++) {
+        const bar = P.k[j];
+        const touched = plan.dir > 0 ? bar.l <= plan.ref : bar.h >= plan.ref;
+        if (!touched) continue;
+        fill = j;
+        const hitSl = stoppedAt(plan.dir, bar, plan.sl);
+        const hitTp = reached(plan.dir, bar, plan.tp);
+        if (hitSl) sameBar = "sl";
+        else if (hitTp) sameBar = "tp";
+        break;
+      }
+      if (fill == null) {
+        out.push({ kind: plan.kind, dir: plan.dir, filled: false, raw: null, managed: null, held: null, atMarket: null });
+        i = look + 1;
+        continue;
+      }
+      const risk = Math.abs(plan.ref - plan.sl);
+      const costR = risk > 0 ? mk.cost * plan.ref / risk : 0;
+      if (sameBar) {
+        const r = sameBar === "sl" ? -1 - costR : plan.reward / plan.dist - costR;
+        const leg = { end: sameBar, r, at: fill };
+        out.push({ kind: plan.kind, dir: plan.dir, filled: true, raw: leg, managed: leg, held: leg, atMarket: null });
+        i = fill + 1;
+        continue;
+      }
+      const rawHeld = simulateTrade(P.k, fill + 1, plan.dir, plan.ref, plan.sl, plan.tp, 120, mk.cost);
+      const timed = simulateTrade(P.k, fill + 1, plan.dir, plan.ref, plan.sl, plan.tp, style.maxBars, mk.cost);
+      const price = P.k[i].c;
+      const marketOk = plan.dir > 0 ? price > plan.sl && price < plan.tp : price < plan.sl && price > plan.tp;
+      const atMarket = marketOk ? simulateTrade(P.k, i + 1, plan.dir, price, plan.sl, plan.tp, style.maxBars, mk.cost) : null;
+      out.push({
+        kind: plan.kind,
+        dir: plan.dir,
+        filled: true,
+        raw: timed?.raw ?? null,
+        managed: timed?.managed ?? null,
+        held: rawHeld?.raw ?? null,
+        atMarket: atMarket?.raw ?? null
+      });
+      i = (timed?.raw.at ?? fill) + 1;
+    }
+    return out;
   }
   function judgeAt(P, i, style, manual, price) {
     const atr = P.atr[i];

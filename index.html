@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=19">
+<link rel="stylesheet" href="style.css?v=20">
 </head>
 <body>
 <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -37,9 +37,8 @@
     <p class="stack" id="stack"></p>
     <ul class="rules">
       <li><b>W</b> sortie au cou</li>
-      <li><b>Tendance</b> une entrée, juste sous l'objectif</li>
-      <li><b>Palier</b> le lot ne monte pas</li>
-      <li><b>Breakout</b> au retour, stop de l'autre côté</li>
+      <li><b>3 stops</b> pour 1 cou</li>
+      <li><b>On laisse</b> breakout et palier</li>
     </ul>
     <div class="seg families" id="families" role="group" aria-label="Famille"></div>
     <div class="names" id="names"></div>
@@ -57,8 +56,8 @@
         <summary>Quatre gestes</summary>
         <ol>
           <li>Choisis le style. La lecture suit l'ordre du cours : grande unité, puis celle du milieu, puis la petite.</li>
-          <li>Une fiche est un setup mûr. Tu places l'ordre toi-même, chez Deriv.</li>
-          <li>À 40 % du chemin, le stop passe à l'entrée. À 60 %, il passe en profit. À 80 %, tu peux fermer.</li>
+          <li>Une fiche est un W mûr. Tu places l'ordre toi-même, chez Deriv, sortie au cou.</li>
+          <li>Compte environ un cou pour trois stops. On ne rapproche pas le stop avant le cou.</li>
           <li>Le choix « je prends » ou « je passe » reste sur cet appareil. Rien n'est envoyé à un courtier.</li>
         </ol>
       </details>
@@ -71,30 +70,26 @@
       <h3 class="sec">Les règles</h3>
       <dl class="lex">
         <dt>W</dt>
-        <dd>Entrée près du second creux ou sommet, encore lent. Sortie au cou, pas plus loin.</dd>
-        <dt>Tendance</dt>
-        <dd>Une seule entrée, dans les 30 % du chemin. La sortie est juste sous l'objectif.</dd>
-        <dt>Palier</dt>
-        <dd>Un nouveau W à chaque retest. Le lot ne dépasse pas le précédent. La sortie est juste sous l'objectif.</dd>
-        <dt>Breakout</dt>
-        <dd>Consolidation, cassure confirmée, entrée au retour. Stop de l'autre côté de la zone. Sortie juste sous le prochain niveau déjà sur le graphique.</dd>
+        <dd>Entrée près du second creux ou sommet, encore lent. Sortie au cou. On ne coupe pas avant.</dd>
+        <dt>Ce qu'on ne propose plus</dt>
+        <dd>Breakout et palier : sur l'historique récent, le stop partait avant l'objectif. On les laisse.</dd>
         <dt>On laisse</dt>
-        <dd>Mouvement difficile, occasion pas encore revenue, occasion déjà partie, sens contraire à la grande unité.</dd>
+        <dd>Mouvement difficile, W déjà parti vers le cou, sens contraire à la grande unité.</dd>
       </dl>
     </section>
   </div>
-  <footer class="note glass">CATRADE. Lecture Maxwell : W, tendance, palier, breakout. Aucun ordre n'est passé d'ici. Icône sur l'iPhone : Safari, Partager, Sur l'écran d'accueil.</footer>
+  <footer class="note glass">CATRADE. W lent, sortie au cou. Aucun ordre n'est passé d'ici. Icône sur l'iPhone : Safari, Partager, Sur l'écran d'accueil.</footer>
   <div class="alertbox glass">
     <div>
-      <p>W : sortie au cou. Tendance et palier : sortie juste sous l'objectif. Breakout : entrée au pullback. À 40 % le stop revient à l'entrée, à 60 % il passe en profit, à 80 % tu peux fermer.</p>
+      <p>Un W se sort au cou. On ne rapproche pas le stop avant : le cou est loin, et le couper trop tôt mange le gain.</p>
       <p>Dans l'appli ntfy, abonne-toi au sujet <b class="topic" id="topic">catrade-a8e3f19c4d</b>.</p>
     </div>
     <button class="btn" id="copyTopic" type="button">Copier le sujet</button>
     <button class="btn" id="notif" type="button">Alerter dans cette page</button>
   </div>
 </div>
-<script src="engine.js?v=39"></script>
-<script src="app.js?v=39"></script>
+<script src="engine.js?v=40"></script>
+<script src="app.js?v=40"></script>
 <script>
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
 </script>

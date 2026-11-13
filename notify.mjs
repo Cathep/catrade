@@ -6,7 +6,7 @@ const DRY = process.env.DRY === "1";
 const ctx = {};
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(new URL("./engine.js", import.meta.url), "utf8"), ctx);
-const { MARKETS, STYLES, evaluate, distText, coursePlan, gestionAt } = ctx.CT;
+const { MARKETS, STYLES, evaluate, distText, coursePlan } = ctx.CT;
 
 const wanted = process.env.STYLE;
 const styles = wanted ? STYLES.filter((s) => s.id === wanted) : STYLES;
@@ -135,7 +135,6 @@ try {
       const sens = sell ? "SELL" : "BUY";
       const pct = pctText(r);
       const title = `${sens} ${plan.kind} ${pct} ${mk.name}`;
-      const at = (q) => fmt(gestionAt(plan, q), mk.dp);
       const lines = [
         sens,
         plan.kind,
@@ -146,9 +145,7 @@ try {
         `SL ${fmt(plan.sl, mk.dp)} (${distText(mk, plan.dist)})`,
         `Sortie ${fmt(plan.tp, mk.dp)} (${distText(mk, plan.reward)})`,
         plan.note,
-        `40 % (${at(0.4)}) : stop à l'entrée`,
-        `60 % (${at(0.6)}) : stop en profit`,
-        `80 % (${at(0.8)}) : tu peux fermer`,
+        "On tient jusqu'au cou. On ne rapproche pas le stop avant.",
         `Fermer au plus tard ${deadline(now, style)}.`,
       ];
       const body = lines.join("\n");

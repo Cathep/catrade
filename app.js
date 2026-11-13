@@ -463,10 +463,6 @@ function courseCard(r, plan, i) {
   const w = winPct(r);
   const ringc = r.record.n < 8 ? "var(--color-muted)" : w >= 45 ? "var(--color-buy)" : "var(--color-warn)";
   const ch = choiceFor(r);
-  const marks = [0.4, 0.6, 0.8].map((q, n) => {
-    const word = ["stop à l'entrée", "stop en profit", "tu peux fermer"][n];
-    return `<li><b>${[40, 60, 80][n]} %</b><span>${fmt(CT.gestionAt(plan, q), mk.dp)}</span><em>${word}</em></li>`;
-  }).join("");
   const span = plan.tp - plan.ref || 1;
   const q = r.price == null ? 0 : (r.price - plan.ref) / span;
   const pct = Math.max(0, Math.min(100, q * 100));
@@ -482,14 +478,13 @@ function courseCard(r, plan, i) {
     <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="kind" data-k="${esc(plan.kind)}">${esc(plan.kind)}</span><span class="subcall">${esc(plan.note)}</span></div>
     ${chart(r, plan)}
     <p class="legend"><span><i class="ln ent"></i>entrée</span><span><i class="ln sln"></i>stop</span><span><i class="ln tpn"></i>sortie</span></p>
-    <div class="rail" aria-hidden="true"><i style="width:${pct}%"></i><b style="left:40%"></b><b style="left:60%"></b><b style="left:80%"></b></div>
+    <div class="rail" aria-hidden="true"><i style="width:${pct}%"></i></div>
     <dl class="lv">
       <div><dt>Entrée</dt><dd>${fmt(plan.ref, mk.dp)}</dd></div>
       <div><dt>Stop</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${esc(distText(mk, plan.dist))}</span></div>
-      <div><dt>Sortie</dt><dd class="tp">${fmt(plan.tp, mk.dp)}</dd><span>${plan.kind === "W" ? "le cou" : "juste sous l'objectif"}</span></div>
+      <div><dt>Sortie</dt><dd class="tp">${fmt(plan.tp, mk.dp)}</dd><span>le cou</span></div>
     </dl>
-    <ol class="steps">${marks}</ol>
-    <p class="stack">${esc(spec.stack)}</p>
+    <p class="stack">On tient jusqu'au cou. Environ un objectif pour trois stops. ${esc(spec.stack)}</p>
     ${actions}
   </article>`;
 }
@@ -501,7 +496,7 @@ function render(fresh) {
   const rest = reports.filter((r) => !plans.some((p) => p.r.id === r.id));
   const grid = $("#grid");
   grid.className = fresh ? "grid fresh" : "grid";
-  grid.innerHTML = plans.length ? plans.map((x, i) => courseCard(x.r, x.plan, i)).join("") : `<div class="glass empty">${!reports.length || busy ? "Lecture en cours." : "Aucun setup mûr. Un W trop loin du creux, une tendance déjà avancée, ou une cassure sans retour ne s'affiche pas."}</div>`;
+  grid.innerHTML = plans.length ? plans.map((x, i) => courseCard(x.r, x.plan, i)).join("") : `<div class="glass empty">${!reports.length || busy ? "Lecture en cours." : "Aucun W mûr. Trop loin du creux, ou déjà parti vers le cou."}</div>`;
   const othersTitle = document.querySelector("summary.sec");
   if (othersTitle) othersTitle.textContent = rest.length ? `Les autres · ${rest.length}` : "Les autres";
   $("#others").innerHTML = rest.length ? rest.map((r) => {
@@ -515,8 +510,8 @@ function render(fresh) {
     const ripe = plans.some((p) => p.r.id === r.id);
     return `<a class="namechip${ripe ? " on" : ""}" href="#m-${esc(r.id)}">${esc(mk.name)}</a>`;
   }).join("");
-  $("#headline").textContent = !reports.length ? "Lecture des marchés…" : reports.every((r) => r.state === "erreur") ? "Prix illisibles." : plans.length ? `${plans.length} setup${plans.length > 1 ? "s" : ""} mûr${plans.length > 1 ? "s" : ""}.` : "Aucun setup mûr pour l'instant.";
-  $("#sub").textContent = !reports.length ? "Les fiches arrivent dès que les prix sont lus." : reports.every((r) => r.state === "erreur") ? "La source des prix ne répond pas. Réessayez." : "Seuls les W lents, les tendances jeunes, les paliers et les breakouts confirmés s'affichent. Rien n'est envoyé à un courtier.";
+  $("#headline").textContent = !reports.length ? "Lecture des marchés…" : reports.every((r) => r.state === "erreur") ? "Prix illisibles." : plans.length ? `${plans.length} W mûr${plans.length > 1 ? "s" : ""}.` : "Aucun W mûr pour l'instant.";
+  $("#sub").textContent = !reports.length ? "Les fiches arrivent dès que les prix sont lus." : reports.every((r) => r.state === "erreur") ? "La source des prix ne répond pas. Réessayez." : "Seuls les W lents, encore près du creux ou du sommet. Sortie au cou. Aucun ordre n'est envoyé.";
 }
 
 function paintChrome() {
@@ -744,9 +739,7 @@ function alertLive() {
       `SL ${fmt(plan.sl, mk.dp)}`,
       `Sortie ${fmt(plan.tp, mk.dp)}`,
       plan.note,
-      `40 % (${at(0.4)}) : stop à l'entrée`,
-      `60 % (${at(0.6)}) : stop en profit`,
-      `80 % (${at(0.8)}) : tu peux fermer`,
+      "On tient jusqu'au cou. On ne rapproche pas le stop avant.",
     ].join("\n");
     if (store.get("ct.notif", false) && "Notification" in window && Notification.permission === "granted") {
       try { new Notification(title, { body, tag: key }); } catch (e) {}
