@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "58";
+const BUILD = "59";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -292,7 +292,7 @@ function askDeriv(symbol, granularity) {
     }
     ws.addEventListener("message", onMsg);
     ws.send(JSON.stringify({
-      ticks_history: symbol, adjust_start_time: 1, count: 240, end: "latest", start: 1, style: "candles", granularity,
+      ticks_history: symbol, adjust_start_time: 1, count: 800, end: "latest", start: 1, style: "candles", granularity,
     }));
   }));
 }
@@ -331,44 +331,47 @@ function quoteOf(ccy) {
   return hit ? hit.price : null;
 }
 
+const chartFrom = {};
+const VIEW = 64;
+
 function chart(r, plan) {
-  const bars = r.candles;
-  if (!bars || bars.length < 2 || r.price == null) return "";
+  const src = r.series && r.series.length >= (r.candles || []).length ? r.series : (r.candles || []);
+  if (src.length < 2 || r.price == null) return "";
+  const view = Math.min(VIEW, src.length);
+  let start = chartFrom[r.id];
+  if (start == null) start = src.length - view;
+  start = Math.max(0, Math.min(src.length - view, Math.round(start)));
+  chartFrom[r.id] = start;
+  const bars = src.slice(start, start + view);
   const zones = (r.zones || []).filter((z) => z.role === "directeur" || (plan && plan.kind === "W" && z.role === "entree"));
   const W = 300, H = 128;
-  const marks = [];
-  if (plan) marks.push(plan.ref, plan.sl, plan.tp, plan.objective);
-  if (plan && plan.kind === "W" && r.pattern) marks.push(r.pattern.neck);
-  for (const z of zones) marks.push(z.top, z.bottom);
-  const hi = Math.max(...bars.map((b) => b.h), ...(marks.length ? marks : [-Infinity]));
-  const lo = Math.min(...bars.map((b) => b.l), ...(marks.length ? marks : [Infinity]));
+  const hi = Math.max(...bars.map((b) => b.h));
+  const lo = Math.min(...bars.map((b) => b.l));
   const span = hi - lo || 1;
-  const x = (i) => (i / (bars.length - 1)) * W;
+  const slot = W / bars.length;
+  const x = (i) => (i + 0.5) * slot;
   const y = (p) => 8 + ((hi - p) / span) * (H - 16);
-  const x0 = (from) => {
-    const local = from - (r.origin || 0);
-    if (local <= 0) return 0;
-    if (local >= bars.length - 1) return W;
-    return x(local);
-  };
-  const bands = zones.map((z, n) => {
+  const bands = zones.map((z) => {
+    const local = z.from - start;
+    if (local >= bars.length) return "";
     const yy = y(z.top);
     const h = y(z.bottom) - yy;
     if (!(h > 0) || !Number.isFinite(yy)) return "";
-    const left = x0(z.from);
+    const left = local <= 0 ? 0 : x(local) - slot / 2;
     const color = z.role === "entree" ? "var(--color-focus)" : "var(--color-sell)";
     return `<rect x="${left}" y="${yy}" width="${Math.max(1, W - left)}" height="${h}" fill="${color}" fill-opacity="0.22" stroke="${color}" stroke-opacity="0.85" stroke-width="1"/>`;
   }).join("");
+  const bodyW = Math.max(2.2, slot * 0.62);
   const bodies = bars.map((b, i) => {
     const up = b.c >= b.o;
     const color = up ? "var(--color-buy)" : "var(--color-sell)";
     const y1 = y(Math.max(b.o, b.c));
-    const h = Math.max(1.2, Math.abs(y(b.o) - y(b.c)));
-    return `<line x1="${x(i)}" x2="${x(i)}" y1="${y(b.h)}" y2="${y(b.l)}" stroke="${color}" stroke-width="1"/><rect x="${x(i) - 2.2}" y="${y1}" width="4.4" height="${h}" fill="${color}" opacity="0.9"/>`;
+    const bh = Math.max(1.2, Math.abs(y(b.o) - y(b.c)));
+    return `<line x1="${x(i)}" x2="${x(i)}" y1="${y(b.h)}" y2="${y(b.l)}" stroke="${color}" stroke-width="1.2"/><rect x="${x(i) - bodyW / 2}" y="${y1}" width="${bodyW}" height="${bh}" fill="${color}" opacity="0.9"/>`;
   }).join("");
   const line = (px, color, dash) => {
     const yy = y(px);
-    if (!Number.isFinite(yy)) return "";
+    if (!Number.isFinite(yy) || yy < -20 || yy > H + 20) return "";
     return `<line x1="0" x2="${W}" y1="${yy}" y2="${yy}" stroke="${color}" stroke-dasharray="${dash}" stroke-width="1.25"/>`;
   };
   let guides = "";
@@ -376,8 +379,39 @@ function chart(r, plan) {
     guides = line(plan.ref, "var(--color-warn)", "2 3") + line(plan.sl, "var(--color-sell)", "1 3") + line(plan.tp, "var(--color-buy)", "4 3");
     if (plan.kind !== "W" && Math.abs(plan.objective - plan.tp) > plan.dist * 0.02) guides += line(plan.objective, "var(--color-focus)", "1 4");
   }
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Bougies, zone du W et niveaux">${bands}${bodies}${guides}</svg>`;
+  const svg = `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Glisse à droite pour voir plus tôt, à gauche pour revenir">${bands}${bodies}${guides}</svg>`;
+  return `<div class="chart-pan" data-id="${esc(r.id)}">${svg}<p class="panhint">Glisse à droite pour voir avant, à gauche pour revenir.</p></div>`;
 }
+
+let chartDrag = null;
+document.addEventListener("pointerdown", (e) => {
+  const box = e.target.closest(".chart-pan");
+  if (!box) return;
+  chartDrag = { id: box.dataset.id, x: e.clientX, y: e.clientY, start: chartFrom[box.dataset.id] || 0, locked: false, pid: e.pointerId };
+});
+document.addEventListener("pointermove", (e) => {
+  if (!chartDrag || e.pointerId !== chartDrag.pid) return;
+  const dx = e.clientX - chartDrag.x;
+  const dy = e.clientY - chartDrag.y;
+  if (!chartDrag.locked) {
+    if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+    if (Math.abs(dy) > Math.abs(dx)) { chartDrag = null; return; }
+    chartDrag.locked = true;
+  }
+  e.preventDefault();
+  const box = document.querySelector('.chart-pan[data-id="' + chartDrag.id + '"]');
+  if (!box) return;
+  const shift = Math.round(-dx / Math.max(6, box.clientWidth / VIEW));
+  const next = chartDrag.start + shift;
+  if (next === chartFrom[chartDrag.id]) return;
+  chartFrom[chartDrag.id] = next;
+  const found = reports.find((x) => x.id === chartDrag.id);
+  if (!found) return;
+  const plan = CT.coursePlan(found, styleById(styleId));
+  box.innerHTML = chart(found, plan).replace(/^<div class="chart-pan"[^>]*>|<\/div>$/g, "");
+}, { passive: false });
+document.addEventListener("pointerup", (e) => { if (chartDrag && e.pointerId === chartDrag.pid) chartDrag = null; });
+document.addEventListener("pointercancel", () => { chartDrag = null; });
 
 function card(r, i) {
   const mk = MARKETS.find((m) => m.id === r.id);
