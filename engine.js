@@ -380,73 +380,83 @@ var CT = (() => {
       }
       if (top > bottom) zones.push({ role: "entree", top, bottom, from: pattern.i1, side: "w" });
     }
-    const winStart = Math.max(0, i - 100);
+    const winStart = Math.max(0, i - 160);
     const ranges = [];
     for (let j = Math.max(0, i - 40); j <= i; j++) ranges.push(k[j].h - k[j].l);
     ranges.sort((a, b) => a - b);
     const typical = ranges.length ? ranges[ranges.length >> 1] : 0;
-    if (!(typical > 0) || i < winStart + 4) return zones;
-    let lo = Infinity;
-    for (let j = winStart; j <= i; j++) lo = Math.min(lo, k[j].l);
-    const bins = /* @__PURE__ */ new Map();
-    const add = (px, side, at) => {
-      const id = Math.floor((px - lo) / typical);
-      const key = `${side}:${id}`;
-      const b = bins.get(key) ?? { id, n: 0, side, ext: px, from: at };
-      b.n += 1;
-      b.side = side;
-      if (side === "h" ? px > b.ext : px < b.ext) b.ext = px;
-      b.from = Math.min(b.from, at);
-      bins.set(key, b);
-    };
-    for (let j = winStart + 2; j <= i - 2; j++) {
-      const h = k[j].h;
-      const l = k[j].l;
-      if (k[j - 1].h <= h && k[j - 2].h <= h && k[j + 1].h <= h && k[j + 2].h <= h) add(h, "h", j);
-      if (k[j - 1].l >= l && k[j - 2].l >= l && k[j + 1].l >= l && k[j + 2].l >= l) add(l, "l", j);
+    const wing = 8;
+    if (!(typical > 0) || i < wing * 2) return zones;
+    const pts = [];
+    for (let j = Math.max(winStart, wing); j <= i - wing; j++) {
+      let high = true;
+      let low = true;
+      for (let n = j - wing; n <= j + wing; n++) {
+        if (n === j) continue;
+        if (k[n].h >= k[j].h) high = false;
+        if (k[n].l <= k[j].l) low = false;
+      }
+      if (high) pts.push({ p: j, ext: k[j].h, side: "h" });
+      if (low) pts.push({ p: j, ext: k[j].l, side: "l" });
     }
-    const hot = [...bins.values()].filter((b) => b.n >= 2).sort((a, b) => a.id - b.id);
-    const runs = [];
-    let cur = [];
-    for (const b of hot) {
-      if (cur.length && b.id > cur[cur.length - 1].id + 1) {
-        runs.push(cur);
-        cur = [b];
-      } else cur.push(b);
+    pts.sort((a, b) => a.ext - b.ext);
+    const shelves = [];
+    for (const pt of pts) {
+      const last = shelves[shelves.length - 1];
+      if (last && Math.abs(pt.ext - last.anchor) <= typical * 1.25) {
+        last.n += 1;
+        last.from = Math.min(last.from, pt.p);
+        if (pt.side === "h" && pt.ext > last.ext) {
+          last.ext = pt.ext;
+          last.side = "h";
+        } else if (pt.side === "l" && last.side === "l" && pt.ext < last.ext) last.ext = pt.ext;
+      } else shelves.push({ anchor: pt.ext, side: pt.side, ext: pt.ext, from: pt.p, n: 1 });
     }
-    if (cur.length) runs.push(cur);
-    const levels = [];
-    const seen = /* @__PURE__ */ new Set();
-    for (const run of runs) {
-      const ends = run.length === 1 ? [run[0]] : [run[0], run[run.length - 1]];
-      for (const b of ends) {
-        if (seen.has(b.id)) continue;
-        seen.add(b.id);
-        levels.push(b);
+    const half = typical * 0.45;
+    let bands = shelves.filter((s) => s.n >= 2).map((s) => ({
+      role: "directeur",
+      top: s.side === "h" ? s.ext : s.ext + half * 2,
+      bottom: s.side === "h" ? s.ext - half * 2 : s.ext,
+      from: s.from,
+      side: s.side
+    })).sort((a, b) => (a.top + a.bottom) / 2 - (b.top + b.bottom) / 2);
+    let glued = true;
+    while (glued) {
+      glued = false;
+      for (let n = 0; n < bands.length - 1; n++) {
+        if (bands[n + 1].bottom - bands[n].top < typical) {
+          bands[n] = {
+            ...bands[n],
+            top: Math.max(bands[n].top, bands[n + 1].top),
+            bottom: Math.min(bands[n].bottom, bands[n + 1].bottom),
+            from: Math.min(bands[n].from, bands[n + 1].from)
+          };
+          bands.splice(n + 1, 1);
+          glued = true;
+          break;
+        }
       }
     }
-    const price = k[i].c;
-    const asZone = (b) => {
-      const top = b.side === "h" ? b.ext : b.ext + typical;
-      const bottom = b.side === "h" ? b.ext - typical : b.ext;
-      return { role: "directeur", top, bottom, from: b.from, side: b.side };
-    };
-    const away = (b) => {
-      const z = asZone(b);
-      return price >= z.bottom && price <= z.top ? 0 : Math.min(Math.abs(price - z.top), Math.abs(price - z.bottom));
-    };
-    const near = levels.slice().sort((a, b) => away(a) - away(b) || b.n - a.n)[0];
-    const summit = levels.filter((b) => b.side === "h").sort((a, b) => b.ext - a.ext)[0];
-    const picked = [];
-    for (const b of [near, summit]) {
-      if (!b || picked.some((p) => p.id === b.id || Math.abs(p.id - b.id) < 3)) continue;
-      picked.push(b);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let n = 1; n < bands.length - 1; n++) {
+        const left = (bands[n].top + bands[n].bottom) / 2 - (bands[n - 1].top + bands[n - 1].bottom) / 2;
+        const right = (bands[n + 1].top + bands[n + 1].bottom) / 2 - (bands[n].top + bands[n].bottom) / 2;
+        if (left < typical * 3 && right < typical * 3) {
+          bands.splice(n, 1);
+          changed = true;
+          break;
+        }
+      }
     }
-    if (picked.length < 2) {
-      const far = levels.filter((b) => !picked.some((p) => Math.abs(p.id - b.id) < 3)).sort((a, b) => away(b) - away(a))[0];
-      if (far) picked.push(far);
+    if (bands.length > 5) {
+      const step = (bands.length - 1) / 4;
+      const spread = [];
+      for (let s = 0; s < 5; s++) spread.push(bands[Math.round(s * step)]);
+      bands = spread.filter((z, at, arr) => arr.indexOf(z) === at);
     }
-    zones.push(...picked.slice(0, 2).map(asZone));
+    zones.push(...bands);
     return zones;
   }
   function zonesOn(k, style, pattern) {
