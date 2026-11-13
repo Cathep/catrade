@@ -23,9 +23,11 @@ var CT = (() => {
   __export(engine_exports, {
     MARKETS: () => MARKETS,
     STYLES: () => STYLES,
+    coursePlan: () => coursePlan,
     distText: () => distText,
     evaluate: () => evaluate,
     fxBlocked: () => fxBlocked,
+    gestionAt: () => gestionAt,
     lotLoss: () => lotLoss,
     patternPlan: () => patternPlan,
     proposeLevels: () => proposeLevels,
@@ -36,6 +38,7 @@ var CT = (() => {
       id: "scalping",
       label: "Scalping",
       tf: "M15",
+      stack: "M15, puis M5, puis M1",
       context: "H1",
       interval: 15,
       step: 15 * 60,
@@ -48,6 +51,7 @@ var CT = (() => {
       id: "day",
       label: "Day",
       tf: "H1",
+      stack: "H4, puis H1, puis M15",
       context: "H4",
       interval: 60,
       step: 60 * 60,
@@ -60,6 +64,7 @@ var CT = (() => {
       id: "swing",
       label: "Swing",
       tf: "H4",
+      stack: "Weekly, puis Daily, puis H4",
       context: "journalier",
       interval: 240,
       step: 4 * 60 * 60,
@@ -424,6 +429,205 @@ var CT = (() => {
       tps: plan.tps
     };
   }
+  function shyOf(entry, objective) {
+    return entry + (objective - entry) * 0.92;
+  }
+  function wSetup(r) {
+    const p = r.pattern;
+    if (!p || !p.slow || !p.secondPart || p.slHit || p.tpHit || p.tooFar || r.price == null) return null;
+    const span = p.dir > 0 ? p.neck - p.ext1 : p.ext1 - p.neck;
+    if (!(span > 0)) return null;
+    const progress = p.dir > 0 ? (r.price - p.ext1) / span : (p.ext1 - r.price) / span;
+    if (!(progress >= 0 && progress <= 0.3)) return null;
+    const pad = (r.atr || 0) * 0.12;
+    const sl = p.dir > 0 ? Math.min(p.ext1, p.ext2) - pad : Math.max(p.ext1, p.ext2) + pad;
+    if (p.dir > 0 ? r.price <= sl : r.price >= sl) return null;
+    const dist = Math.abs(p.ext1 - sl);
+    if (!(dist > 0)) return null;
+    return { ref: p.ext1, neck: p.neck, sl, dist, dir: p.dir, key: p.key };
+  }
+  function youngTrend(k, dir) {
+    const highs = [];
+    const lows = [];
+    const wing = 3;
+    const start = Math.max(wing, k.length - 160);
+    for (let i = start; i < k.length - wing; i++) {
+      let hi = true;
+      let lo = true;
+      for (let j = i - wing; j <= i + wing; j++) {
+        if (j === i) continue;
+        if (k[j].h >= k[i].h) hi = false;
+        if (k[j].l <= k[i].l) lo = false;
+      }
+      if (hi) highs.push(i);
+      if (lo) lows.push(i);
+    }
+    if (dir > 0) {
+      for (let n = lows.length - 2; n >= 1; n--) {
+        const prev = lows[n - 1];
+        const turn = lows[n];
+        const next = lows[n + 1];
+        if (!(k[prev].l > k[turn].l && k[next].l > k[turn].l)) continue;
+        const before = highs.filter((i) => i < turn && i > turn - 120);
+        if (!before.length || !highs.some((i) => i > turn)) continue;
+        const origin = before.reduce((a, b) => k[a].h >= k[b].h ? a : b);
+        const floor = k[turn].l;
+        const objective = k[origin].h;
+        if (!(objective > floor)) continue;
+        const levels = lows.filter((i) => i > origin && i < turn).map((i) => k[i].l).filter((px) => px > floor && px < objective);
+        return { floor, objective, levels };
+      }
+    } else {
+      for (let n = highs.length - 2; n >= 1; n--) {
+        const prev = highs[n - 1];
+        const turn = highs[n];
+        const next = highs[n + 1];
+        if (!(k[prev].h < k[turn].h && k[next].h < k[turn].h)) continue;
+        const before = lows.filter((i) => i < turn && i > turn - 120);
+        if (!before.length || !lows.some((i) => i > turn)) continue;
+        const origin = before.reduce((a, b) => k[a].l <= k[b].l ? a : b);
+        const floor = k[turn].h;
+        const objective = k[origin].l;
+        if (!(objective < floor)) continue;
+        const levels = highs.filter((i) => i > origin && i < turn).map((i) => k[i].h).filter((px) => px < floor && px > objective);
+        return { floor, objective, levels };
+      }
+    }
+    return null;
+  }
+  function breakoutOf(r) {
+    const k = r.series;
+    if (!k || k.length < 50 || r.price == null || !(r.atr && r.atr > 0)) return null;
+    const n = k.length;
+    const atr = r.atr;
+    for (let len = 12; len <= 36; len++) {
+      const end = n - 4;
+      const start = end - len;
+      if (start < 20) continue;
+      let top = -Infinity;
+      let bot = Infinity;
+      for (let i = start; i < end; i++) {
+        if (k[i].h > top) top = k[i].h;
+        if (k[i].l < bot) bot = k[i].l;
+      }
+      const height = top - bot;
+      if (!(height > 0.8 * atr && height < 4 * atr)) continue;
+      let nearTop = 0;
+      let nearBot = 0;
+      for (let i = start; i < end; i++) {
+        if (k[i].h >= top - 0.25 * height) nearTop++;
+        if (k[i].l <= bot + 0.25 * height) nearBot++;
+      }
+      if (nearTop < 2 || nearBot < 2) continue;
+      let dir = 0;
+      for (let i = end; i < n - 1; i++) {
+        if (k[i].c > top) {
+          dir = 1;
+          break;
+        }
+        if (k[i].c < bot) {
+          dir = -1;
+          break;
+        }
+      }
+      if (!dir) continue;
+      const level = dir > 0 ? top : bot;
+      const sl = dir > 0 ? bot : top;
+      const mid = (top + bot) / 2;
+      if (Math.abs(r.price - level) > 0.35 * height) continue;
+      if (dir > 0 ? r.price < mid || r.price <= sl : r.price > mid || r.price >= sl) continue;
+      let major = null;
+      const wing = 3;
+      for (let i = wing; i < start; i++) {
+        if (dir > 0) {
+          let hi = true;
+          for (let j = i - wing; j <= i + wing; j++) if (j !== i && k[j].h >= k[i].h) hi = false;
+          if (hi && k[i].h > level + height * 0.5 && (major == null || k[i].h < major)) major = k[i].h;
+        } else {
+          let lo = true;
+          for (let j = i - wing; j <= i + wing; j++) if (j !== i && k[j].l <= k[i].l) lo = false;
+          if (lo && k[i].l < level - height * 0.5 && (major == null || k[i].l > major)) major = k[i].l;
+        }
+      }
+      if (major == null) continue;
+      const tp = shyOf(level, major);
+      const reward = Math.abs(tp - level);
+      const dist = Math.abs(level - sl);
+      if (!(reward > dist * 0.5 && dist > 0)) continue;
+      return {
+        kind: "BREAKOUT",
+        dir,
+        ref: level,
+        sl,
+        dist,
+        tp,
+        objective: major,
+        reward,
+        step: 1,
+        key: `${dir}:${level.toFixed(6)}`,
+        note: "Cassure confirm\xE9e. Entr\xE9e au retour sur le niveau. Stop de l'autre c\xF4t\xE9."
+      };
+    }
+    return null;
+  }
+  function coursePlan(r, style) {
+    if (r.price == null || r.state === "agite" || r.state === "ferme" || r.state === "erreur") return null;
+    if (r.reasonCode === "LOCAL_AGAINST_CONTEXT") return null;
+    const simple = wSetup(r);
+    if (simple && style.id !== "scalping") {
+      const trend = youngTrend(r.series?.length ? r.series : r.candles, simple.dir);
+      if (trend) {
+        const span = Math.abs(trend.objective - trend.floor);
+        const progress = simple.dir > 0 ? (r.price - trend.floor) / span : (trend.floor - r.price) / span;
+        const reward = Math.abs(shyOf(simple.ref, trend.objective) - simple.ref);
+        if (progress >= 0 && progress < 0.8 && (simple.dir > 0 ? trend.objective > simple.ref : trend.objective < simple.ref) && reward > simple.dist) {
+          const band = span * 0.08;
+          let near = false;
+          let passed = 0;
+          for (const lv of trend.levels) {
+            if (Math.abs(simple.ref - lv) <= band) near = true;
+            else if (simple.dir > 0 ? lv < simple.ref - band : lv > simple.ref + band) passed++;
+          }
+          const tp = shyOf(simple.ref, trend.objective);
+          const base = {
+            dir: simple.dir,
+            ref: simple.ref,
+            sl: simple.sl,
+            dist: simple.dist,
+            tp,
+            objective: trend.objective,
+            reward: Math.abs(tp - simple.ref),
+            key: simple.key
+          };
+          if (near) {
+            return { ...base, kind: "PALIER", step: passed + 1, note: `Palier ${passed + 1}. Le lot reste inf\xE9rieur ou \xE9gal au pr\xE9c\xE9dent. La sortie est juste sous l'objectif.` };
+          }
+          if (progress <= 0.3) {
+            return { ...base, kind: "TENDANCE", step: 1, note: "Une seule entr\xE9e sur cette tendance. La sortie est juste sous l'objectif." };
+          }
+        }
+      }
+    }
+    if (simple && style.id !== "swing") {
+      return {
+        kind: "W",
+        dir: simple.dir,
+        ref: simple.ref,
+        sl: simple.sl,
+        dist: simple.dist,
+        tp: simple.neck,
+        objective: simple.neck,
+        reward: Math.abs(simple.neck - simple.ref),
+        step: 0,
+        key: simple.key,
+        note: "Sortir au cou. Pas d'objectif plus loin."
+      };
+    }
+    return breakoutOf(r);
+  }
+  function gestionAt(plan, q) {
+    return plan.ref + (plan.tp - plan.ref) * q;
+  }
   function judgeAt(P, i, style, manual, price) {
     const atr = P.atr[i];
     const vr = volRatio(P.k, i);
@@ -455,9 +659,6 @@ var CT = (() => {
       return refuse("LOCAL_AGAINST_CONTEXT", "Sens local oppos\xE9 \xE0 la r\xE9f\xE9rence : entr\xE9e refus\xE9e.");
     }
     if (!(atr > 0)) return refuse("ANALYSIS_DATA_INCOMPLETE", "Amplitude illisible.");
-    const netMove = Math.abs(P.k[i].c - P.k[Math.max(0, i - 8)].c);
-    if (netMove < 0.45 * atr) return refuse("MOVEMENT_NOT_CLEAR", "Mouvement pas assez net.");
-    if (vr != null && vr > 2.15) return refuse("MOVEMENT_NOT_CLEAR", "Amplitude trop agit\xE9e pour un mouvement net.");
     const w = buildPattern(P, i, "W", usable(P.pivL, i, style.wing), atr, price);
     const m = buildPattern(P, i, "M", usable(P.pivH, i, style.wing), atr, price);
     const aligned = dir > 0 ? w : m;
@@ -474,6 +675,19 @@ var CT = (() => {
       if (aligned.slHit) notes.push("Stop du motif d\xE9j\xE0 touch\xE9.");
     }
     if (other && (!aligned || other.i2 > aligned.i2)) notes.push("Un motif inverse est visible. Il n'oriente pas ce sens.");
+    const netMove = Math.abs(P.k[i].c - P.k[Math.max(0, i - 8)].c);
+    if (netMove < 0.45 * atr || vr != null && vr > 2.15) {
+      const agitated = vr != null && vr > 2.15;
+      return {
+        ...refuse(
+          "MOVEMENT_NOT_CLEAR",
+          agitated ? "Amplitude trop agit\xE9e pour un mouvement net." : "Mouvement pas assez net."
+        ),
+        pattern: aligned,
+        opposed: !!other,
+        notes
+      };
+    }
     const levels = aligned ? proposeLevels(price, aligned, atr) : null;
     if (aligned && !levels) notes.push("G\xE9om\xE9trie incompl\xE8te : aucun niveau invent\xE9.");
     if (levels && levels.rr < 2) {
@@ -509,7 +723,7 @@ var CT = (() => {
       verdict,
       buffer: manual ? dir * 2 : dir,
       reasonCode: manual ? "WM_MANUAL_REVIEW" : "CURRENT_CODE_SETUP_ACCEPTED",
-      reason: manual ? "Sens autoris\xE9 par les autres filtres. Le W/M se juge \xE0 l'\u0153il." : "Contexte autoris\xE9, motif retenu et niveaux coh\xE9rents selon ces r\xE8gles.",
+      reason: manual ? "Contexte autoris\xE9. Pas de W, tendance, palier ou breakout m\xFBr." : "Contexte autoris\xE9, motif retenu et niveaux coh\xE9rents selon ces r\xE8gles.",
       pattern: aligned,
       opposed: !!other,
       notes,
@@ -576,6 +790,7 @@ var CT = (() => {
       price: null,
       spark: [],
       candles: [],
+      series: [],
       origin: 0,
       pattern: null,
       opposed: false,
@@ -613,6 +828,7 @@ var CT = (() => {
       price,
       spark,
       candles,
+      series: closed,
       origin: sliceFrom,
       record,
       days,

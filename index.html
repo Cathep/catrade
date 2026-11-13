@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>CATRADE</title>
-<meta name="description" content="CATRADE lit dix marchés et propose un sens à examiner, le W ou le M détecté, un stop et un objectif.">
+<meta name="description" content="CATRADE propose l'entrée, le stop et la sortie d'un W, d'une tendance, d'un palier ou d'un breakout. L'ordre se place chez Deriv.">
 <meta name="theme-color" content="#0A1330">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=17">
+<link rel="stylesheet" href="style.css?v=19">
 </head>
 <body>
 <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -33,67 +33,68 @@
     <p class="lede" id="sub">Les fiches arrivent dès que les prix sont lus.</p>
     <div class="row">
       <div class="seg" id="styles" role="group" aria-label="Style"></div>
-      <button class="btn on" id="manual" type="button" aria-pressed="true">W/M jugé à l'œil</button>
     </div>
+    <p class="stack" id="stack"></p>
+    <ul class="rules">
+      <li><b>W</b> sortie au cou</li>
+      <li><b>Tendance</b> une entrée, juste sous l'objectif</li>
+      <li><b>Palier</b> le lot ne monte pas</li>
+      <li><b>Breakout</b> au retour, stop de l'autre côté</li>
+    </ul>
     <div class="seg families" id="families" role="group" aria-label="Famille"></div>
     <div class="names" id="names"></div>
     <p class="status" id="status">En attente des prix.</p>
   </section>
   <div class="grid" id="grid"></div>
-  <section class="panel glass">
-    <h3 class="sec">Les autres</h3>
+  <details class="panel glass fold">
+    <summary class="sec">Les autres</summary>
     <ul class="others" id="others"></ul>
-  </section>
+  </details>
   <div class="cols">
     <section class="panel glass">
       <h3 class="sec">Comment s'en servir</h3>
       <details class="fold" open>
         <summary>Quatre gestes</summary>
         <ol>
-          <li>Choisissez Scalping, Day ou Swing. Le motif se lit sur M15, H1 ou H4.</li>
-          <li>Une fiche Acheter ou Vendre est un sens autorisé, pas un ordre.</li>
-          <li>Trait bleu = cou, trait ambre = second extrémum. Le W ou le M se juge à l'œil.</li>
-          <li>Je prends note votre choix sur cet appareil. Rien n'est envoyé à un courtier.</li>
+          <li>Choisis le style. La lecture suit l'ordre du cours : grande unité, puis celle du milieu, puis la petite.</li>
+          <li>Une fiche est un setup mûr. Tu places l'ordre toi-même, chez Deriv.</li>
+          <li>À 40 % du chemin, le stop passe à l'entrée. À 60 %, il passe en profit. À 80 %, tu peux fermer.</li>
+          <li>Le choix « je prends » ou « je passe » reste sur cet appareil. Rien n'est envoyé à un courtier.</li>
         </ol>
       </details>
-      <details class="fold" open>
-        <summary>Pour que ça tourne sans cette page</summary>
-        <ol>
-          <li>Téléphone, écran verrouillé : TradingView. Colle le script Pine du ZIP, ajoute-le au graphique, active l'alerte. C'est le serveur TradingView qui prévient, pas cette page.</li>
-          <li>Zones et bandes T11 : MetaTrader 5. Copie le dossier MT5/MQL5 du ZIP, compile l'indicateur puis le robot, laisse-les sur le graphique.</li>
-          <li>L'ordre : le mode d'origine ne l'envoie pas, même si TradeAuto est vrai. Tu le places chez le courtier. Laisse TradeAuto sur false.</li>
-          <li>Pour que le terminal reste allumé quand l'ordinateur est éteint, il lui faut un VPS. Cette page ne devient pas le courtier.</li>
-        </ol>
+      <details class="fold">
+        <summary>Téléphone verrouillé</summary>
+        <p>Dans l'appli ntfy, abonne-toi au sujet affiché en bas. Une alerte part une fois par setup, pas à chaque bougie. Cette page n'a pas besoin de rester ouverte.</p>
       </details>
     </section>
     <section class="panel glass">
-      <h3 class="sec">Le vocabulaire 4.42</h3>
+      <h3 class="sec">Les règles</h3>
       <dl class="lex">
-        <dt>Jugement manuel</dt>
-        <dd>Réglage d'origine activé. Un W absent, trop rapide ou non réintégré n'interdit plus le sens. Buffer +2 ou −2.</dd>
-        <dt>Mode historique</dt>
-        <dd>Le W/M redevient un veto. Buffer +1 ou −1, seulement si le motif passe les anciens critères et un rapport d'au moins 2.</dd>
-        <dt>W et M</dt>
-        <dd>Double creux pour acheter, double sommet pour vendre. Deux extrêmes proches, un cou entre les deux.</dd>
-        <dt>Ce qui peut encore dire non</dt>
-        <dd>Tendance locale absente, contexte opposé, mouvement flou, week-end sur le forex et l'or, prix illisibles.</dd>
-        <dt>Zones, ordre et T11</dt>
-        <dd>Ils vivent dans MetaTrader, pas dans cette page. En jugement manuel, l'expert 4.42 non plus n'envoie aucun ordre W/M et ne déplace pas T11. Les zones et les bandes T11 se dessinent sur le graphique du terminal. L'ordre, tu le passes toi-même avec les niveaux de la fiche.</dd>
+        <dt>W</dt>
+        <dd>Entrée près du second creux ou sommet, encore lent. Sortie au cou, pas plus loin.</dd>
+        <dt>Tendance</dt>
+        <dd>Une seule entrée, dans les 30 % du chemin. La sortie est juste sous l'objectif.</dd>
+        <dt>Palier</dt>
+        <dd>Un nouveau W à chaque retest. Le lot ne dépasse pas le précédent. La sortie est juste sous l'objectif.</dd>
+        <dt>Breakout</dt>
+        <dd>Consolidation, cassure confirmée, entrée au retour. Stop de l'autre côté de la zone. Sortie juste sous le prochain niveau déjà sur le graphique.</dd>
+        <dt>On laisse</dt>
+        <dd>Mouvement difficile, occasion pas encore revenue, occasion déjà partie, sens contraire à la grande unité.</dd>
       </dl>
     </section>
   </div>
-  <footer class="note glass">CATRADE 4.42. Tous les marchés Deriv ouverts : Volatility, Boom, Crash, Jump, Step, indices, or, forex. Pas Weltrade. Icône sur l'iPhone : Safari, Partager, Sur l'écran d'accueil.</footer>
+  <footer class="note glass">CATRADE. Lecture Maxwell : W, tendance, palier, breakout. Aucun ordre n'est passé d'ici. Icône sur l'iPhone : Safari, Partager, Sur l'écran d'accueil.</footer>
   <div class="alertbox glass">
     <div>
-      <p>W : sortie au cou. TENDANCE et PALIER : objectif de la tendance. BREAKOUT : cassure confirmée, entrée au pullback, stop de l'autre côté. Sur chaque alerte : à 40 % stop à l'entrée, à 60 % stop en profit, à 80 % tu peux fermer.</p>
+      <p>W : sortie au cou. Tendance et palier : sortie juste sous l'objectif. Breakout : entrée au pullback. À 40 % le stop revient à l'entrée, à 60 % il passe en profit, à 80 % tu peux fermer.</p>
       <p>Dans l'appli ntfy, abonne-toi au sujet <b class="topic" id="topic">catrade-a8e3f19c4d</b>.</p>
     </div>
     <button class="btn" id="copyTopic" type="button">Copier le sujet</button>
     <button class="btn" id="notif" type="button">Alerter dans cette page</button>
   </div>
 </div>
-<script src="engine.js?v=17"></script>
-<script src="app.js?v=37"></script>
+<script src="engine.js?v=39"></script>
+<script src="app.js?v=39"></script>
 <script>
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
 </script>

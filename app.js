@@ -24,7 +24,7 @@ let family = store.get("ct.family", "Volatility");
 const FAMILIES = [];
 for (const m of MARKETS) if (m.aka && !FAMILIES.includes(m.aka)) FAMILIES.push(m.aka);
 if (!FAMILIES.includes(family)) family = "Volatility";
-let manual = store.get("ct.manual", true);
+let manual = true;
 let reports = [];
 let busy = false;
 let scannedAt = 0;
@@ -341,17 +341,16 @@ function quoteOf(ccy) {
   return hit ? hit.price : null;
 }
 
-function chart(r) {
+function chart(r, plan) {
   const bars = r.candles;
   if (!bars || bars.length < 2 || r.price == null) return "";
-  const W = 300, H = 92;
-  const plan = planOf(r);
-  const marks = plan ? plan.tps.map((t) => t.price) : [];
-  const hi = Math.max(...bars.map((b) => b.h), r.pattern ? r.pattern.neck : -Infinity, ...(marks.length ? marks : [-Infinity]));
-  const lo = Math.min(...bars.map((b) => b.l), r.pattern ? Math.min(r.pattern.ext1, r.pattern.ext2) : Infinity, ...(marks.length ? marks : [Infinity]));
+  const W = 300, H = 128;
+  const marks = plan ? [plan.ref, plan.sl, plan.tp, plan.objective] : [];
+  const hi = Math.max(...bars.map((b) => b.h), ...(marks.length ? marks : [-Infinity]));
+  const lo = Math.min(...bars.map((b) => b.l), ...(marks.length ? marks : [Infinity]));
   const span = hi - lo || 1;
   const x = (i) => (i / (bars.length - 1)) * W;
-  const y = (p) => 6 + ((hi - p) / span) * (H - 14);
+  const y = (p) => 8 + ((hi - p) / span) * (H - 16);
   const bodies = bars.map((b, i) => {
     const up = b.c >= b.o;
     const color = up ? "var(--color-buy)" : "var(--color-sell)";
@@ -359,12 +358,15 @@ function chart(r) {
     const h = Math.max(1.2, Math.abs(y(b.o) - y(b.c)));
     return `<line x1="${x(i)}" x2="${x(i)}" y1="${y(b.h)}" y2="${y(b.l)}" stroke="${color}" stroke-width="1"/><rect x="${x(i) - 2.2}" y="${y1}" width="4.4" height="${h}" fill="${color}" opacity="0.9"/>`;
   }).join("");
+  const line = (px, color, dash) => {
+    const yy = y(px);
+    if (!Number.isFinite(yy)) return "";
+    return `<line x1="0" x2="${W}" y1="${yy}" y2="${yy}" stroke="${color}" stroke-dasharray="${dash}" stroke-width="1.25"/>`;
+  };
   let guides = "";
-  if (r.pattern) {
-    const neck = y(r.pattern.neck);
-    const extP = r.pattern.dir > 0 ? Math.min(r.pattern.ext1, r.pattern.ext2) : Math.max(r.pattern.ext1, r.pattern.ext2);
-    const targets = plan ? plan.tps.map((t) => `<line x1="0" x2="${W}" y1="${y(t.price)}" y2="${y(t.price)}" stroke="${t.hit ? "var(--color-muted)" : "var(--color-buy)"}" stroke-dasharray="4 3" stroke-width="1"/>`).join("") : "";
-    guides = `<line x1="0" x2="${W}" y1="${neck}" y2="${neck}" stroke="var(--color-focus)" stroke-dasharray="4 3" stroke-width="1"/><line x1="0" x2="${W}" y1="${y(extP)}" y2="${y(extP)}" stroke="var(--color-warn)" stroke-dasharray="2 3" stroke-width="1"/>${targets}`;
+  if (plan) {
+    guides = line(plan.ref, "var(--color-warn)", "2 3") + line(plan.sl, "var(--color-sell)", "1 3") + line(plan.tp, "var(--color-buy)", "4 3");
+    if (plan.kind !== "W" && Math.abs(plan.objective - plan.tp) > plan.dist * 0.02) guides += line(plan.objective, "var(--color-focus)", "1 4");
   }
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Dernières bougies">${bodies}${guides}</svg>`;
 }
@@ -454,37 +456,74 @@ function simulate(box) {
   box.querySelector("[data-sim=note]").textContent = `Lot minimum Deriv ${num(spec.min, lotDigits(spec.min))}. ${unit}.`;
 }
 
+function courseCard(r, plan, i) {
+  const mk = MARKETS.find((m) => m.id === r.id);
+  const spec = styleById(styleId);
+  const sell = plan.dir < 0;
+  const w = winPct(r);
+  const ringc = r.record.n < 8 ? "var(--color-muted)" : w >= 45 ? "var(--color-buy)" : "var(--color-warn)";
+  const ch = choiceFor(r);
+  const marks = [0.4, 0.6, 0.8].map((q, n) => {
+    const word = ["stop à l'entrée", "stop en profit", "tu peux fermer"][n];
+    return `<li><b>${[40, 60, 80][n]} %</b><span>${fmt(CT.gestionAt(plan, q), mk.dp)}</span><em>${word}</em></li>`;
+  }).join("");
+  const span = plan.tp - plan.ref || 1;
+  const q = r.price == null ? 0 : (r.price - plan.ref) / span;
+  const pct = Math.max(0, Math.min(100, q * 100));
+  const actions = ch && ch.c === "pris"
+    ? `<p class="taken">Noté. Tu places l'ordre toi-même.</p><div class="choice"><button class="btn" type="button" data-undo="${esc(r.id)}">Annuler</button></div>`
+    : ch && ch.c === "passe"
+      ? `<p class="taken">Tu as passé ce cas.</p><div class="choice"><button class="btn" type="button" data-undo="${esc(r.id)}">Revoir</button></div>`
+      : `<div class="choice"><button class="btn go" type="button" data-take="${esc(r.id)}">Je prends</button><button class="btn" type="button" data-skip="${esc(r.id)}">Je passe</button></div>`;
+  return `<article class="card glass rise" id="m-${esc(r.id)}" data-dir="${plan.dir}" data-choice="${ch ? ch.c : ""}" style="--i:${i}">
+    <div class="head"><div><p class="name">${esc(mk.name)}<span class="buf">${esc(spec.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div>
+      <div class="ring" style="--p:${r.record.n ? Math.round(w) : 0};--ringc:${ringc}"><b>${r.record.n ? Math.round(w) + " %" : "—"}<small>${r.record.n ? "gagnants" : "peu de cas"}</small></b></div>
+    </div>
+    <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="kind" data-k="${esc(plan.kind)}">${esc(plan.kind)}</span><span class="subcall">${esc(plan.note)}</span></div>
+    ${chart(r, plan)}
+    <p class="legend"><span><i class="ln ent"></i>entrée</span><span><i class="ln sln"></i>stop</span><span><i class="ln tpn"></i>sortie</span></p>
+    <div class="rail" aria-hidden="true"><i style="width:${pct}%"></i><b style="left:40%"></b><b style="left:60%"></b><b style="left:80%"></b></div>
+    <dl class="lv">
+      <div><dt>Entrée</dt><dd>${fmt(plan.ref, mk.dp)}</dd></div>
+      <div><dt>Stop</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${esc(distText(mk, plan.dist))}</span></div>
+      <div><dt>Sortie</dt><dd class="tp">${fmt(plan.tp, mk.dp)}</dd><span>${plan.kind === "W" ? "le cou" : "juste sous l'objectif"}</span></div>
+    </dl>
+    <ol class="steps">${marks}</ol>
+    <p class="stack">${esc(spec.stack)}</p>
+    ${actions}
+  </article>`;
+}
+
 function render(fresh) {
-  const avis = reports.filter((r) => r.state === "avis");
-  const live = avis.filter(openNow);
-  const ordered = live.concat(avis.filter((r) => !openNow(r)));
-  const rest = reports.filter((r) => r.state !== "avis");
+  const spec = styleById(styleId);
+  const plans = reports.map((r) => ({ r, plan: CT.coursePlan(r, spec) })).filter((x) => x.plan);
+  plans.sort((a, b) => winPct(b.r) - winPct(a.r));
+  const rest = reports.filter((r) => !plans.some((p) => p.r.id === r.id));
   const grid = $("#grid");
   grid.className = fresh ? "grid fresh" : "grid";
-  grid.innerHTML = ordered.length ? ordered.map(card).join("") : `<div class="glass empty">${!reports.length || busy ? "Lecture en cours." : manual ? "Aucun marché ne passe les filtres encore actifs." : "Aucun motif ne passe les anciens critères."}</div>`;
+  grid.innerHTML = plans.length ? plans.map((x, i) => courseCard(x.r, x.plan, i)).join("") : `<div class="glass empty">${!reports.length || busy ? "Lecture en cours." : "Aucun setup mûr. Un W trop loin du creux, une tendance déjà avancée, ou une cassure sans retour ne s'affiche pas."}</div>`;
+  const othersTitle = document.querySelector("summary.sec");
+  if (othersTitle) othersTitle.textContent = rest.length ? `Les autres · ${rest.length}` : "Les autres";
   $("#others").innerHTML = rest.length ? rest.map((r) => {
     const mk = MARKETS.find((m) => m.id === r.id);
     return `<li id="m-${esc(r.id)}"><b>${esc(mk.name)}</b><b>${r.price != null ? fmt(r.price, mk.dp) : "?"}</b><span>${esc(r.reason)}</span></li>`;
-  }).join("") : `<li><span>${reports.length ? "Tous les marchés lus ont un sens à examiner." : "Pas encore de lecture."}</span></li>`;
+  }).join("") : `<li><span>${reports.length ? "Tous les marchés lus ont un setup mûr." : "Pas encore de lecture."}</span></li>`;
   const order = new Map(MARKETS.map((m, i) => [m.id, i]));
   const listed = reports.slice().sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   $("#names").innerHTML = listed.map((r) => {
     const mk = MARKETS.find((m) => m.id === r.id);
-    return `<a class="namechip${r.state === "avis" ? " on" : ""}" href="#m-${esc(r.id)}">${esc(mk.name)}</a>`;
+    const ripe = plans.some((p) => p.r.id === r.id);
+    return `<a class="namechip${ripe ? " on" : ""}" href="#m-${esc(r.id)}">${esc(mk.name)}</a>`;
   }).join("");
-  const withPattern = ordered.filter((r) => r.pattern).length;
-  $("#headline").textContent = !reports.length ? "Lecture des marchés…" : reports.every((r) => r.state === "erreur") ? "Prix illisibles." : live.length ? `${live.length} occasion${live.length > 1 ? "s" : ""} ouverte${live.length > 1 ? "s" : ""}` : ordered.length ? "Aucune occasion encore ouverte." : "Rien à proposer pour l'instant.";
-  $("#sub").textContent = !reports.length ? "Les fiches arrivent dès que les prix sont lus." : reports.every((r) => r.state === "erreur") ? "La source des prix ne répond pas. Réessayez." : live.length ? "Elles sont en haut. L'alerte part dans ntfy tout de suite." : manual ? `${withPattern ? withPattern + " W ou M déjà terminé" + (withPattern > 1 ? "s" : "") + ". " : ""}Aucun ordre n'est envoyé.` : "Mode historique : sans W/M lent, confirmé et réintégré, le sens reste refusé.";
-  document.querySelectorAll(".sim[open]").forEach(simulate);
+  $("#headline").textContent = !reports.length ? "Lecture des marchés…" : reports.every((r) => r.state === "erreur") ? "Prix illisibles." : plans.length ? `${plans.length} setup${plans.length > 1 ? "s" : ""} mûr${plans.length > 1 ? "s" : ""}.` : "Aucun setup mûr pour l'instant.";
+  $("#sub").textContent = !reports.length ? "Les fiches arrivent dès que les prix sont lus." : reports.every((r) => r.state === "erreur") ? "La source des prix ne répond pas. Réessayez." : "Seuls les W lents, les tendances jeunes, les paliers et les breakouts confirmés s'affichent. Rien n'est envoyé à un courtier.";
 }
 
 function paintChrome() {
   $("#styles").innerHTML = STYLES.map((s) => `<button type="button" aria-pressed="${styleId === s.id}" data-style="${s.id}">${esc(s.label)}<span class="buf">${esc(s.tf)}</span></button>`).join("");
   $("#families").innerHTML = FAMILIES.map((f) => `<button type="button" aria-pressed="${family === f}" data-family="${esc(f)}">${esc(f)}</button>`).join("");
-  const b = $("#manual");
-  b.className = manual ? "btn on" : "btn";
-  b.setAttribute("aria-pressed", String(manual));
-  b.textContent = manual ? "W/M jugé à l'œil" : "W/M filtre automatique";
+  const stack = $("#stack");
+  if (stack) stack.textContent = styleById(styleId).stack;
 }
 
 async function scan() {
@@ -688,9 +727,7 @@ function alertLive() {
   const seen = store.get("ct.ntfy", {});
   let changed = false;
   for (const r of reports) {
-    const trend = spec.id === "scalping" ? null : trendPlan(r);
-    const simple = spec.id === "swing" ? null : maxwellPlan(r);
-    const plan = trend || (simple ? { kind: "W", dir: r.dir, ref: simple.ref, sl: simple.sl, dist: simple.dist, tp: simple.neck, reward: Math.abs(simple.neck - simple.ref), key: r.pattern.key } : null) || breakoutPlan(r);
+    const plan = CT.coursePlan(r, spec);
     if (!plan) continue;
     const key = `${plan.kind}:${r.id}:${styleId}:${plan.key}`;
     if (seen[key]) continue;
@@ -700,13 +737,17 @@ function alertLive() {
     const sens = plan.dir < 0 ? "SELL" : "BUY";
     const pct = pctText(r);
     const title = `${sens} ${plan.kind} ${pct} ${mk.name}`;
-    const lines = [sens, plan.kind, pct, `${spec.label} ${spec.tf}`, `Entrée ${fmt(plan.ref, mk.dp)}`, `SL ${fmt(plan.sl, mk.dp)}`, `TP ${fmt(plan.tp, mk.dp)}`];
-    if (plan.kind === "W") lines.push("Sortir au cou. Pas d'objectif plus loin.");
-    else if (plan.kind === "PALIER") lines.push(`Palier ${plan.step}. Lot inférieur ou égal au précédent.`, "Garder jusqu'à l'objectif.");
-    else if (plan.kind === "TENDANCE") lines.push("Une seule entrée sur cette tendance.", "Garder jusqu'à l'objectif.");
-    else lines.push("Cassure confirmée. Entrée au pullback.", "Stop de l'autre côté de la consolidation.");
-    lines.push(...gestion(plan, mk));
-    const body = lines.join("\n");
+    const at = (q) => fmt(CT.gestionAt(plan, q), mk.dp);
+    const body = [
+      sens, plan.kind, pct, `${spec.label} ${spec.tf}`, spec.stack,
+      `Entrée ${fmt(plan.ref, mk.dp)}`,
+      `SL ${fmt(plan.sl, mk.dp)}`,
+      `Sortie ${fmt(plan.tp, mk.dp)}`,
+      plan.note,
+      `40 % (${at(0.4)}) : stop à l'entrée`,
+      `60 % (${at(0.6)}) : stop en profit`,
+      `80 % (${at(0.8)}) : tu peux fermer`,
+    ].join("\n");
     if (store.get("ct.notif", false) && "Notification" in window && Notification.permission === "granted") {
       try { new Notification(title, { body, tag: key }); } catch (e) {}
     }
