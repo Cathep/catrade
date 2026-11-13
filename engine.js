@@ -128,13 +128,6 @@ var CT = (() => {
     { id: "stpRNG10", sym: "Step", name: "Step Index 1000", aka: "Step", cls: "synth", dp: 1, cost: 8e-5 },
     { id: "stpRNG15", sym: "Step", name: "Step Index 1500", aka: "Step", cls: "synth", dp: 1, cost: 8e-5 },
     { id: "stpRNG20", sym: "Step", name: "Step Index 2000", aka: "Step", cls: "synth", dp: 1, cost: 8e-5 },
-    { id: "RB100", sym: "Range", name: "Range Break 100 Index", aka: "Range", cls: "synth", dp: 1, cost: 8e-5 },
-    { id: "RB200", sym: "Range", name: "Range Break 200 Index", aka: "Range", cls: "synth", dp: 1, cost: 8e-5 },
-    { id: "WLDAUD", sym: "Basket", name: "AUD Basket", aka: "Basket", cls: "synth", dp: 3, cost: 8e-5 },
-    { id: "WLDEUR", sym: "Basket", name: "EUR Basket", aka: "Basket", cls: "synth", dp: 3, cost: 8e-5 },
-    { id: "WLDGBP", sym: "Basket", name: "GBP Basket", aka: "Basket", cls: "synth", dp: 3, cost: 8e-5 },
-    { id: "WLDXAU", sym: "Basket", name: "Gold Basket", aka: "Basket", cls: "synth", dp: 3, cost: 8e-5 },
-    { id: "WLDUSD", sym: "Basket", name: "USD Basket", aka: "Basket", cls: "synth", dp: 3, cost: 8e-5 },
     { id: "RDBEAR", sym: "Daily", name: "Bear Market Index", aka: "Daily", cls: "synth", dp: 4, cost: 8e-5 },
     { id: "RDBULL", sym: "Daily", name: "Bull Market Index", aka: "Daily", cls: "synth", dp: 4, cost: 8e-5 },
     { id: "frxXAUUSD", sym: "M\xE9tal", name: "XAUUSD", aka: "M\xE9tal", cls: "gold", dp: 2, cost: 15e-5 },
@@ -529,7 +522,6 @@ var CT = (() => {
   function coursePlan(r, style) {
     if (r.price == null || r.state === "agite" || r.state === "ferme" || r.state === "erreur") return null;
     if (r.reasonCode === "LOCAL_AGAINST_CONTEXT") return null;
-    if (r.id !== "RB100" && r.id !== "RB200") return null;
     const simple = wSetup(r);
     if (!simple || style.id === "swing") return null;
     return {
@@ -543,7 +535,7 @@ var CT = (() => {
       reward: Math.abs(simple.neck - simple.ref),
       step: 0,
       key: simple.key,
-      note: "Sortir au cou. On ne rapproche pas le stop : ici le cou arrive plus souvent que le stop."
+      note: "Sortir au cou. On ne rapproche pas le stop."
     };
   }
   function gestionAt(plan, q) {

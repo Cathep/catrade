@@ -20,10 +20,10 @@ function esc(s) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let styleId = store.get("ct.style", "day");
-let family = store.get("ct.family", "Range");
+let family = store.get("ct.family", "Volatility");
 const FAMILIES = [];
 for (const m of MARKETS) if (m.aka && !FAMILIES.includes(m.aka)) FAMILIES.push(m.aka);
-if (!FAMILIES.includes(family)) family = "Range";
+if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
@@ -81,13 +81,6 @@ const LOT_SPEC = {
   "Step Index 1000": { min: 0.1, max: 270, contract: 10, ccy: "USD" },
   "Step Index 1500": { min: 0.1, max: 270, contract: 10, ccy: "USD" },
   "Step Index 2000": { min: 0.1, max: 270, contract: 10, ccy: "USD" },
-  "Range Break 100 Index": { min: 0.01, max: 15, contract: 1, ccy: "USD" },
-  "Range Break 200 Index": { min: 0.01, max: 20, contract: 1, ccy: "USD" },
-  "AUD Basket": { min: 0.01, max: 10, contract: 100, ccy: "USD" },
-  "EUR Basket": { min: 0.01, max: 13, contract: 100, ccy: "USD" },
-  "GBP Basket": { min: 0.01, max: 10, contract: 100, ccy: "USD" },
-  "Gold Basket": { min: 0.01, max: 2, contract: 1, ccy: "USD" },
-  "USD Basket": { min: 0.01, max: 12, contract: 100, ccy: "USD" },
   "Bear Market Index": { min: 0.01, max: 100, contract: 1, ccy: "USD" },
   "Bull Market Index": { min: 0.01, max: 100, contract: 1, ccy: "USD" },
   "XAUUSD": { min: 0.01, max: 30, contract: 100, ccy: "USD" },
@@ -482,7 +475,7 @@ function courseCard(r, plan, i) {
       <div><dt>Stop</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${esc(distText(mk, plan.dist))}</span></div>
       <div><dt>Sortie</dt><dd class="tp">${fmt(plan.tp, mk.dp)}</dd><span>le cou</span></div>
     </dl>
-    <p class="stack">Range Break. On tient jusqu'au cou, sans rapprocher le stop. ${esc(spec.stack)}</p>
+    <p class="stack">On tient jusqu'au cou, sans rapprocher le stop. ${esc(spec.stack)}</p>
     ${actions}
   </article>`;
 }
@@ -494,7 +487,7 @@ function render(fresh) {
   const rest = reports.filter((r) => !plans.some((p) => p.r.id === r.id));
   const grid = $("#grid");
   grid.className = fresh ? "grid fresh" : "grid";
-  grid.innerHTML = plans.length ? plans.map((x, i) => courseCard(x.r, x.plan, i)).join("") : `<div class="glass empty">${!reports.length || busy ? "Lecture en cours." : "Aucun W Range Break. On laisse les autres marchés : le même W y prend le stop trop souvent."}</div>`;
+  grid.innerHTML = plans.length ? plans.map((x, i) => courseCard(x.r, x.plan, i)).join("") : `<div class="glass empty">${!reports.length || busy ? "Lecture en cours." : "Aucun W mûr. On attend un creux lent, encore près de la ligne."}</div>`;
   const othersTitle = document.querySelector("summary.sec");
   if (othersTitle) othersTitle.textContent = rest.length ? `Les autres · ${rest.length}` : "Les autres";
   $("#others").innerHTML = rest.length ? rest.map((r) => {
@@ -509,7 +502,7 @@ function render(fresh) {
     return `<a class="namechip${ripe ? " on" : ""}" href="#m-${esc(r.id)}">${esc(mk.name)}</a>`;
   }).join("");
   $("#headline").textContent = !reports.length ? "Lecture des marchés…" : reports.every((r) => r.state === "erreur") ? "Prix illisibles." : plans.length ? `${plans.length} W mûr${plans.length > 1 ? "s" : ""}.` : "Aucun W mûr pour l'instant.";
-  $("#sub").textContent = !reports.length ? "Les fiches arrivent dès que les prix sont lus." : reports.every((r) => r.state === "erreur") ? "La source des prix ne répond pas. Réessayez." : "Range Break seulement. Entrée dans le premier cinquième, sortie au cou.";
+  $("#sub").textContent = !reports.length ? "Les fiches arrivent dès que les prix sont lus." : reports.every((r) => r.state === "erreur") ? "La source des prix ne répond pas. Réessayez." : "Entrée dans le premier cinquième, sortie au cou.";
 }
 
 function paintChrome() {
