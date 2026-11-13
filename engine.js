@@ -412,51 +412,54 @@ var CT = (() => {
         } else if (pt.side === "l" && last.side === "l" && pt.ext < last.ext) last.ext = pt.ext;
       } else shelves.push({ anchor: pt.ext, side: pt.side, ext: pt.ext, from: pt.p, n: 1 });
     }
-    const half = typical * 0.45;
-    let bands = shelves.filter((s) => s.n >= 2).map((s) => ({
+    const half = Math.min(typical * 0.35, (() => {
+      let hi = -Infinity;
+      let lo = Infinity;
+      for (let j = Math.max(0, i - 119); j <= i; j++) {
+        hi = Math.max(hi, k[j].h);
+        lo = Math.min(lo, k[j].l);
+      }
+      return (hi - lo) * 0.04;
+    })());
+    let drafts = shelves.filter((s) => s.n >= 2).map((s) => ({
       role: "directeur",
       top: s.side === "h" ? s.ext : s.ext + half * 2,
       bottom: s.side === "h" ? s.ext - half * 2 : s.ext,
       from: s.from,
-      side: s.side
+      side: s.side,
+      n: s.n
     })).sort((a, b) => (a.top + a.bottom) / 2 - (b.top + b.bottom) / 2);
-    let glued = true;
-    while (glued) {
-      glued = false;
-      for (let n = 0; n < bands.length - 1; n++) {
-        if (bands[n + 1].bottom - bands[n].top < typical) {
-          bands[n] = {
-            ...bands[n],
-            top: Math.max(bands[n].top, bands[n + 1].top),
-            bottom: Math.min(bands[n].bottom, bands[n + 1].bottom),
-            from: Math.min(bands[n].from, bands[n + 1].from)
-          };
-          bands.splice(n + 1, 1);
-          glued = true;
-          break;
-        }
-      }
-    }
     let changed = true;
     while (changed) {
       changed = false;
-      for (let n = 1; n < bands.length - 1; n++) {
-        const left = (bands[n].top + bands[n].bottom) / 2 - (bands[n - 1].top + bands[n - 1].bottom) / 2;
-        const right = (bands[n + 1].top + bands[n + 1].bottom) / 2 - (bands[n].top + bands[n].bottom) / 2;
-        if (left < typical * 3 && right < typical * 3) {
-          bands.splice(n, 1);
+      for (let n = 1; n < drafts.length - 1; n++) {
+        const left = drafts[n].bottom - drafts[n - 1].top;
+        const right = drafts[n + 1].bottom - drafts[n].top;
+        const h = drafts[n].top - drafts[n].bottom;
+        if (left < h * 2 && right < h * 2) {
+          drafts.splice(n, 1);
           changed = true;
           break;
         }
       }
     }
-    if (bands.length > 5) {
-      const step = (bands.length - 1) / 4;
-      const spread = [];
-      for (let s = 0; s < 5; s++) spread.push(bands[Math.round(s * step)]);
-      bands = spread.filter((z, at, arr) => arr.indexOf(z) === at);
+    changed = true;
+    while (changed) {
+      changed = false;
+      for (let n = 0; n < drafts.length - 1; n++) {
+        if (drafts[n + 1].bottom - drafts[n].top < (drafts[n].top - drafts[n].bottom) * 1.5) {
+          const drop = drafts[n].n < drafts[n + 1].n ? n : n + 1;
+          drafts.splice(drop, 1);
+          changed = true;
+          break;
+        }
+      }
     }
-    zones.push(...bands);
+    if (drafts.length > 5) {
+      const ranked = drafts.slice().sort((a, b) => b.n - a.n).slice(0, 5);
+      drafts = ranked.sort((a, b) => a.bottom - b.bottom);
+    }
+    zones.push(...drafts.map((d) => ({ role: d.role, top: d.top, bottom: d.bottom, from: d.from, side: d.side })));
     return zones;
   }
   function zonesOn(k, style, pattern) {
