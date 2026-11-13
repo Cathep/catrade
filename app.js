@@ -548,6 +548,8 @@ function alertLive() {
     changed = true;
     const mk = MARKETS.find((m) => m.id === r.id);
     const plan = planOf(r);
+    const room = plan?.tps?.[0]?.rr ?? (plan?.dist ? plan.tps[0].reward / plan.dist : 0);
+    if (!(room >= 1)) continue;
     const sens = r.dir < 0 ? "SELL" : "BUY";
     const rang = grade(r);
     const pct = pctText(r);
