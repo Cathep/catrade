@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>CATRADE</title>
 <meta name="description" content="CATRADE propose l'entrée, le stop et la sortie d'un W, d'une tendance, d'un palier ou d'un breakout. L'ordre se place chez Deriv.">
-<meta name="theme-color" content="#0A1330">
+<meta name="theme-color" content="#10110e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -15,20 +15,23 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=25">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=26">
 </head>
 <body>
 <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
 <div class="wrap">
-  <header class="top glass">
-    <h1 class="brand"><img src="favicon.svg" alt="" width="30" height="30" class="mark">CATRADE</h1>
+  <header class="top">
+    <div>
+      <h1 class="brand"><img src="favicon.svg" alt="" width="28" height="28" class="mark">CATRADE</h1>
+      <p class="brandline">La lecture du W</p>
+    </div>
     <div class="top-r">
       <div class="clock" id="clock"></div>
       <button class="btn go" id="refresh" type="button">Actualiser</button>
     </div>
   </header>
-  <section class="hero glass" aria-live="polite">
+  <section class="hero" aria-live="polite">
     <div class="hero-top">
       <div>
         <p class="kicker">Lecture</p>
@@ -45,12 +48,12 @@
     <div class="names" id="names"></div>
   </section>
   <div class="grid" id="grid"></div>
-  <details class="panel glass fold">
+  <details class="panel fold">
     <summary class="sec">Les autres</summary>
     <ul class="others" id="others"></ul>
   </details>
   <div class="cols">
-    <section class="panel glass">
+    <section class="panel">
       <h3 class="sec">Comment s'en servir</h3>
       <details class="fold" open>
         <summary>Quatre gestes</summary>
@@ -66,7 +69,7 @@
         <p>Dans l'appli ntfy, abonne-toi au sujet affiché en bas. Une alerte part une fois par setup, pas à chaque bougie. Cette page n'a pas besoin de rester ouverte.</p>
       </details>
     </section>
-    <section class="panel glass">
+    <section class="panel">
       <h3 class="sec">Les règles</h3>
       <dl class="lex">
         <dt>W</dt>
@@ -80,8 +83,8 @@
       </dl>
     </section>
   </div>
-  <footer class="note glass">CATRADE. Sortie au cou. Aucun ordre n'est passé d'ici. Icône sur l'iPhone : Safari, Partager, Sur l'écran d'accueil.</footer>
-  <div class="alertbox glass">
+  <footer class="note">CATRADE. Sortie au cou. Aucun ordre n'est passé d'ici.</footer>
+  <div class="alertbox">
     <div>
       <p>Sortie au cou. On ne rapproche pas le stop.</p>
       <p>Dans l'appli ntfy, abonne-toi au sujet <b class="topic" id="topic">catrade-a8e3f19c4d</b>.</p>
@@ -90,8 +93,8 @@
     <button class="btn" id="notif" type="button">Alerter dans cette page</button>
   </div>
 </div>
-<script src="engine.js?v=64"></script>
-<script src="app.js?v=64"></script>
+<script src="engine.js?v=65"></script>
+<script src="app.js?v=65"></script>
 <script>
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
 </script>
