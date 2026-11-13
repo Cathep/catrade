@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "63";
+const BUILD = "64";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -339,6 +339,18 @@ function sourceOf(r) {
   return r.series && r.series.length >= (r.candles || []).length ? r.series : (r.candles || []);
 }
 
+function zonesForView(r, start, view) {
+  const src = sourceOf(r);
+  let last = Math.min(src.length - 1, start);
+  for (let i = 0; i < view; i++) if (start + i < src.length) last = start + i;
+  const from = Math.max(0, last - 200);
+  const slice = src.slice(from, last + 1);
+  let zones = [];
+  try { zones = CT.zonesOn(slice, styleById(styleId), null) || []; }
+  catch (e) { zones = []; }
+  return zones.map((z) => ({ ...z, from: z.from + from }));
+}
+
 function frameOf(r) {
   const src = sourceOf(r);
   const want = chartView[r.id] || 64;
@@ -360,7 +372,9 @@ function chartInner(r, plan) {
   const { start, bars, view } = frameOf(r);
   const real = bars.filter(Boolean);
   if (real.length < 2 || r.price == null) return "";
-  const zones = (r.zones || []).filter((z) => z.role === "directeur" || (plan && plan.kind === "W" && z.role === "entree"));
+  const traced = zonesForView(r, start, view);
+  const live = start + view >= sourceOf(r).length - 8;
+  const zones = traced.filter((z) => z.role === "directeur").concat(live && plan && plan.kind === "W" ? (r.zones || []).filter((z) => z.role === "entree") : []);
   const W = 300, H = 128;
   const hi = Math.max(...real.map((b) => b.h));
   const lo = Math.min(...real.map((b) => b.l));
