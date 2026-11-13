@@ -137,7 +137,7 @@ try {
         await sleep(700);
       }
       const r = evaluate(mk, bars, now, style, true);
-      if (!r.pattern || r.state !== "avis" || !r.levels) continue;
+      if (!r.pattern || r.state !== "avis" || !r.levels || !r.pattern.reintegrated) continue;
       const id = `${mk.id}:${style.id}:${r.pattern.key}`;
       if (seen.has(id)) continue;
       const sell = r.dir < 0;
