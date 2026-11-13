@@ -123,6 +123,7 @@ let sent = 0;
 
 try {
   for (const style of styles) {
+    if (!wanted && style.id === "scalping") continue;
     for (const mk of markets) {
       let bars = cache.get(`${mk.id}:${style.step}`);
       if (!bars) {

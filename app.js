@@ -536,8 +536,9 @@ function grade(r) {
 }
 
 function alertLive() {
-  const seen = store.get("ct.ntfy", {});
   const spec = styleById(styleId);
+  if (spec.id === "scalping") return;
+  const seen = store.get("ct.ntfy", {});
   let changed = false;
   for (const r of reports) {
     if (!openNow(r)) continue;
