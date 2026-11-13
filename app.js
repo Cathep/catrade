@@ -541,7 +541,7 @@ function alertLive() {
   const seen = store.get("ct.ntfy", {});
   let changed = false;
   for (const r of reports) {
-    if (!openNow(r) || !r.pattern?.reintegrated) continue;
+    if (!openNow(r) || !r.pattern?.reintegrated || r.opposed) continue;
     const key = `${r.id}:${styleId}:${r.pattern.key}`;
     if (seen[key]) continue;
     seen[key] = Date.now();
