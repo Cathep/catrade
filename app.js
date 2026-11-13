@@ -37,8 +37,6 @@ const LOT_SPEC = {
   "Volatility 10 Index": { min: 0.5, max: 1280, contract: 1, ccy: "USD" },
   "Volatility 100 (1s) Index": { min: 1, max: 900, contract: 1, ccy: "USD" },
   "Volatility 100 Index": { min: 1, max: 1000, contract: 1, ccy: "USD" },
-  "Volatility 150 (1s) Index": { min: 1, max: 50, contract: 1, ccy: "USD" },
-  "Volatility 250 (1s) Index": { min: 10, max: 50, contract: 1, ccy: "USD" },
   "Volatility 15 (1s) Index": { min: 0.2, max: 370, contract: 1, ccy: "USD" },
   "Volatility 25 (1s) Index": { min: 0.005, max: 4, contract: 1, ccy: "USD" },
   "Volatility 25 Index": { min: 0.5, max: 1000, contract: 1, ccy: "USD" },

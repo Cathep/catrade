@@ -86,8 +86,6 @@ var CT = (() => {
     { id: "R_10", sym: "Volatility", name: "Volatility 10 Index", aka: "Volatility", cls: "synth", dp: 3, cost: 8e-5 },
     { id: "1HZ100V", sym: "Volatility", name: "Volatility 100 (1s) Index", aka: "Volatility", cls: "synth", dp: 2, cost: 8e-5 },
     { id: "R_100", sym: "Volatility", name: "Volatility 100 Index", aka: "Volatility", cls: "synth", dp: 2, cost: 8e-5 },
-    { id: "1HZ150V", sym: "Volatility", name: "Volatility 150 (1s) Index", aka: "Volatility", cls: "synth", dp: 2, cost: 8e-5 },
-    { id: "1HZ250V", sym: "Volatility", name: "Volatility 250 (1s) Index", aka: "Volatility", cls: "synth", dp: 2, cost: 8e-5 },
     { id: "1HZ15V", sym: "Volatility", name: "Volatility 15 (1s) Index", aka: "Volatility", cls: "synth", dp: 3, cost: 8e-5 },
     { id: "1HZ25V", sym: "Volatility", name: "Volatility 25 (1s) Index", aka: "Volatility", cls: "synth", dp: 2, cost: 8e-5 },
     { id: "R_25", sym: "Volatility", name: "Volatility 25 Index", aka: "Volatility", cls: "synth", dp: 3, cost: 8e-5 },
