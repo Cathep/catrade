@@ -529,6 +529,7 @@ var CT = (() => {
   function coursePlan(r, style) {
     if (r.price == null || r.state === "agite" || r.state === "ferme" || r.state === "erreur") return null;
     if (r.reasonCode === "LOCAL_AGAINST_CONTEXT") return null;
+    if (r.id !== "RB100" && r.id !== "RB200") return null;
     const simple = wSetup(r);
     if (!simple || style.id === "swing") return null;
     return {
@@ -542,7 +543,7 @@ var CT = (() => {
       reward: Math.abs(simple.neck - simple.ref),
       step: 0,
       key: simple.key,
-      note: "Sortir au cou. Le prix est encore dans le premier cinqui\xE8me du chemin. On ne rapproche pas le stop avant."
+      note: "Sortir au cou. On ne rapproche pas le stop : ici le cou arrive plus souvent que le stop."
     };
   }
   function gestionAt(plan, q) {

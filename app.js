@@ -20,10 +20,10 @@ function esc(s) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let styleId = store.get("ct.style", "day");
-let family = store.get("ct.family", "Volatility");
+let family = store.get("ct.family", "Range");
 const FAMILIES = [];
 for (const m of MARKETS) if (m.aka && !FAMILIES.includes(m.aka)) FAMILIES.push(m.aka);
-if (!FAMILIES.includes(family)) family = "Volatility";
+if (!FAMILIES.includes(family)) family = "Range";
 let manual = true;
 let reports = [];
 let busy = false;
@@ -460,8 +460,6 @@ function courseCard(r, plan, i) {
   const mk = MARKETS.find((m) => m.id === r.id);
   const spec = styleById(styleId);
   const sell = plan.dir < 0;
-  const w = winPct(r);
-  const ringc = r.record.n < 8 ? "var(--color-muted)" : w >= 45 ? "var(--color-buy)" : "var(--color-warn)";
   const ch = choiceFor(r);
   const span = plan.tp - plan.ref || 1;
   const q = r.price == null ? 0 : (r.price - plan.ref) / span;
@@ -473,7 +471,7 @@ function courseCard(r, plan, i) {
       : `<div class="choice"><button class="btn go" type="button" data-take="${esc(r.id)}">Je prends</button><button class="btn" type="button" data-skip="${esc(r.id)}">Je passe</button></div>`;
   return `<article class="card glass rise" id="m-${esc(r.id)}" data-dir="${plan.dir}" data-choice="${ch ? ch.c : ""}" style="--i:${i}">
     <div class="head"><div><p class="name">${esc(mk.name)}<span class="buf">${esc(spec.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div>
-      <div class="ring" style="--p:${r.record.n ? Math.round(w) : 0};--ringc:${ringc}"><b>${r.record.n ? Math.round(w) + " %" : "—"}<small>${r.record.n ? "gagnants" : "peu de cas"}</small></b></div>
+      <div class="ring" style="--p:65;--ringc:var(--color-buy)"><b>cou<small>la sortie</small></b></div>
     </div>
     <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="kind" data-k="${esc(plan.kind)}">${esc(plan.kind)}</span><span class="subcall">${esc(plan.note)}</span></div>
     ${chart(r, plan)}
@@ -484,7 +482,7 @@ function courseCard(r, plan, i) {
       <div><dt>Stop</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${esc(distText(mk, plan.dist))}</span></div>
       <div><dt>Sortie</dt><dd class="tp">${fmt(plan.tp, mk.dp)}</dd><span>le cou</span></div>
     </dl>
-    <p class="stack">On tient jusqu'au cou, sans rapprocher le stop. Le stop est le cas le plus fréquent : le cou paie plusieurs stops. ${esc(spec.stack)}</p>
+    <p class="stack">Range Break. On tient jusqu'au cou, sans rapprocher le stop. ${esc(spec.stack)}</p>
     ${actions}
   </article>`;
 }
@@ -496,7 +494,7 @@ function render(fresh) {
   const rest = reports.filter((r) => !plans.some((p) => p.r.id === r.id));
   const grid = $("#grid");
   grid.className = fresh ? "grid fresh" : "grid";
-  grid.innerHTML = plans.length ? plans.map((x, i) => courseCard(x.r, x.plan, i)).join("") : `<div class="glass empty">${!reports.length || busy ? "Lecture en cours." : "Aucun W mûr. Au-delà du premier cinquième vers le cou, ou à contre-sens : on laisse."}</div>`;
+  grid.innerHTML = plans.length ? plans.map((x, i) => courseCard(x.r, x.plan, i)).join("") : `<div class="glass empty">${!reports.length || busy ? "Lecture en cours." : "Aucun W Range Break. On laisse les autres marchés : le même W y prend le stop trop souvent."}</div>`;
   const othersTitle = document.querySelector("summary.sec");
   if (othersTitle) othersTitle.textContent = rest.length ? `Les autres · ${rest.length}` : "Les autres";
   $("#others").innerHTML = rest.length ? rest.map((r) => {
@@ -511,7 +509,7 @@ function render(fresh) {
     return `<a class="namechip${ripe ? " on" : ""}" href="#m-${esc(r.id)}">${esc(mk.name)}</a>`;
   }).join("");
   $("#headline").textContent = !reports.length ? "Lecture des marchés…" : reports.every((r) => r.state === "erreur") ? "Prix illisibles." : plans.length ? `${plans.length} W mûr${plans.length > 1 ? "s" : ""}.` : "Aucun W mûr pour l'instant.";
-  $("#sub").textContent = !reports.length ? "Les fiches arrivent dès que les prix sont lus." : reports.every((r) => r.state === "erreur") ? "La source des prix ne répond pas. Réessayez." : "W lent, encore dans le premier cinquième du chemin vers le cou. Aucun ordre n'est envoyé.";
+  $("#sub").textContent = !reports.length ? "Les fiches arrivent dès que les prix sont lus." : reports.every((r) => r.state === "erreur") ? "La source des prix ne répond pas. Réessayez." : "Range Break seulement. Entrée dans le premier cinquième, sortie au cou.";
 }
 
 function paintChrome() {

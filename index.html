@@ -36,7 +36,7 @@
     </div>
     <p class="stack" id="stack"></p>
     <ul class="rules">
-      <li><b>Premier cinquième</b> du chemin</li>
+      <li><b>Range Break</b> seulement</li>
       <li><b>Sortie</b> au cou</li>
       <li><b>On ne bouge pas</b> le stop</li>
     </ul>
@@ -56,9 +56,9 @@
         <summary>Quatre gestes</summary>
         <ol>
           <li>Choisis le style. La lecture suit l'ordre du cours : grande unité, puis celle du milieu, puis la petite.</li>
-          <li>Une fiche n'existe que si le prix est encore dans le premier cinquième du chemin vers le cou. Tu places l'ordre limite sur la ligne, chez Deriv.</li>
-          <li>Le cas le plus fréquent est le stop. On ne le rapproche pas : sinon le cou ne paie plus les stops.</li>
-          <li>Préfère le scalping. Le day est le même W, avec moins de cas. Rien n'est envoyé à un courtier.</li>
+          <li>Une fiche n'existe que sur Range Break, et seulement dans le premier cinquième du chemin vers le cou. Tu places l'ordre limite sur la ligne, chez Deriv.</li>
+          <li>Sortie au cou. On ne rapproche pas le stop.</li>
+          <li>Ailleurs, ce W perd trop souvent. Une seule position, environ 2 % du capital. Rien n'est envoyé à un courtier.</li>
         </ol>
       </details>
       <details class="fold">
@@ -70,26 +70,26 @@
       <h3 class="sec">Les règles</h3>
       <dl class="lex">
         <dt>W</dt>
-        <dd>Entrée seulement dans le premier cinquième du chemin, second creux ou sommet encore lent. Ce cinquième est un placement : le cours dit « le plus près possible », dans les 30 % au plus. Sortie au cou.</dd>
+        <dd>Range Break seulement, dans le premier cinquième du chemin, sortie au cou. Le choix du marché n'est pas une phrase du cours.</dd>
         <dt>Ce qu'on ne propose plus</dt>
-        <dd>Breakout et palier : le stop partait avant l'objectif. Élargir le stop du W relève le nombre de réussites et efface le gain.</dd>
+        <dd>Les autres marchés, le breakout et le palier : le stop part trop souvent.</dd>
         <dt>On laisse</dt>
         <dd>Prix déjà sorti du premier cinquième, sens contraire à la grande unité, unité swing.</dd>
       </dl>
     </section>
   </div>
-  <footer class="note glass">CATRADE. W lent, sortie au cou. Aucun ordre n'est passé d'ici. Icône sur l'iPhone : Safari, Partager, Sur l'écran d'accueil.</footer>
+  <footer class="note glass">CATRADE. Range Break, sortie au cou. Aucun ordre n'est passé d'ici. Icône sur l'iPhone : Safari, Partager, Sur l'écran d'accueil.</footer>
   <div class="alertbox glass">
     <div>
-      <p>Un W se prend dans le premier cinquième du chemin, et se sort au cou. On ne rapproche pas le stop : le cas le plus fréquent est un stop, et le cou paie les stops.</p>
+      <p>Range Break seulement. Sortie au cou. On ne rapproche pas le stop.</p>
       <p>Dans l'appli ntfy, abonne-toi au sujet <b class="topic" id="topic">catrade-a8e3f19c4d</b>.</p>
     </div>
     <button class="btn" id="copyTopic" type="button">Copier le sujet</button>
     <button class="btn" id="notif" type="button">Alerter dans cette page</button>
   </div>
 </div>
-<script src="engine.js?v=41"></script>
-<script src="app.js?v=41"></script>
+<script src="engine.js?v=42"></script>
+<script src="app.js?v=42"></script>
 <script>
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
 </script>
