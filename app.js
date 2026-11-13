@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "61";
+const BUILD = "62";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -343,28 +343,33 @@ function frameOf(r) {
   const src = sourceOf(r);
   const want = chartView[r.id] || 64;
   const view = Math.max(Math.min(VIEW_MIN, src.length), Math.min(src.length, Math.round(want)));
+  const gap = Math.max(8, Math.round(view * 0.16));
+  const maxStart = Math.max(0, src.length - view + gap);
   let start = chartFrom[r.id];
-  if (start == null) start = src.length - view;
-  start = Math.max(0, Math.min(src.length - view, Math.round(start)));
+  if (start == null) start = maxStart;
+  start = Math.max(0, Math.min(maxStart, Math.round(start)));
   chartView[r.id] = view;
   chartFrom[r.id] = start;
-  return { src, view, start, bars: src.slice(start, start + view) };
+  const bars = [];
+  for (let i = 0; i < view; i++) bars.push(start + i < src.length ? src[start + i] : null);
+  return { src, view, start, bars };
 }
 
 function chartInner(r, plan) {
-  const { start, bars } = frameOf(r);
-  if (bars.length < 2 || r.price == null) return "";
+  const { start, bars, view } = frameOf(r);
+  const real = bars.filter(Boolean);
+  if (real.length < 2 || r.price == null) return "";
   const zones = (r.zones || []).filter((z) => z.role === "directeur" || (plan && plan.kind === "W" && z.role === "entree"));
   const W = 300, H = 128;
-  const hi = Math.max(...bars.map((b) => b.h));
-  const lo = Math.min(...bars.map((b) => b.l));
+  const hi = Math.max(...real.map((b) => b.h));
+  const lo = Math.min(...real.map((b) => b.l));
   const span = hi - lo || 1;
-  const slot = W / bars.length;
+  const slot = W / view;
   const x = (i) => (i + 0.5) * slot;
   const y = (p) => 8 + ((hi - p) / span) * (H - 16);
   const bands = zones.map((z) => {
     const local = z.from - start;
-    if (local >= bars.length) return "";
+    if (local >= view) return "";
     const yy = y(z.top);
     const h = y(z.bottom) - yy;
     if (!(h > 0) || !Number.isFinite(yy)) return "";
@@ -374,6 +379,7 @@ function chartInner(r, plan) {
   }).join("");
   const bodyW = Math.max(2.2, slot * 0.62);
   const bodies = bars.map((b, i) => {
+    if (!b) return "";
     const up = b.c >= b.o;
     const color = up ? "var(--color-buy)" : "var(--color-sell)";
     const y1 = y(Math.max(b.o, b.c));
@@ -390,7 +396,7 @@ function chartInner(r, plan) {
     guides = line(plan.ref, "var(--color-warn)", "2 3") + line(plan.sl, "var(--color-sell)", "1 3") + line(plan.tp, "var(--color-buy)", "4 3");
     if (plan.kind !== "W" && Math.abs(plan.objective - plan.tp) > plan.dist * 0.02) guides += line(plan.objective, "var(--color-focus)", "1 4");
   }
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Glisse à droite pour remonter plus loin dans le temps.">${bands}${bodies}${guides}</svg><div class="chart-foot"><p class="panhint">À droite, plus loin dans le temps.</p><div class="chart-tools"><button type="button" data-zoom="in" aria-label="Agrandir">+</button><button type="button" data-zoom="out" aria-label="Réduire">−</button></div></div>`;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Espace vide à droite, là où le prix n'est pas encore arrivé.">${bands}${bodies}${guides}</svg><div class="chart-foot"><p class="panhint">À droite, le prix n'est pas encore là.</p><div class="chart-tools"><button type="button" data-zoom="in" aria-label="Agrandir">+</button><button type="button" data-zoom="out" aria-label="Réduire">−</button></div></div>`;
 }
 
 function chart(r, plan) {
