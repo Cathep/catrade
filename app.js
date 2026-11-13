@@ -614,10 +614,73 @@ function trendPlan(r) {
     if (Math.abs(simple.ref - lv) <= band) near = true;
     else if (p.dir > 0 ? lv < simple.ref - band : lv > simple.ref + band) passed++;
   }
-  const base = { ref: simple.ref, sl: simple.sl, dist: simple.dist, tp: trend.objective, reward, progress };
-  if (near) return { ...base, kind: "PALIER", step: passed + 1 };
-  if (progress <= 0.3) return { ...base, kind: "TENDANCE", step: 1 };
+  const base = { ref: simple.ref, sl: simple.sl, dist: simple.dist, tp: trend.objective, reward, progress, key: p.key };
+  if (near) return { ...base, kind: "PALIER", step: passed + 1, dir: p.dir };
+  if (progress <= 0.3) return { ...base, kind: "TENDANCE", step: 1, dir: p.dir };
   return null;
+}
+
+function breakoutPlan(r) {
+  const k = r.bars;
+  if (!k || k.length < 50 || r.price == null || !(r.atr > 0)) return null;
+  const n = k.length;
+  const atr = r.atr;
+  for (let len = 12; len <= 36; len++) {
+    const end = n - 4;
+    const start = end - len;
+    if (start < 20) continue;
+    let top = -Infinity;
+    let bot = Infinity;
+    for (let i = start; i < end; i++) {
+      if (k[i].h > top) top = k[i].h;
+      if (k[i].l < bot) bot = k[i].l;
+    }
+    const height = top - bot;
+    if (!(height > 0.8 * atr && height < 4 * atr)) continue;
+    let nearTop = 0;
+    let nearBot = 0;
+    for (let i = start; i < end; i++) {
+      if (k[i].h >= top - 0.25 * height) nearTop++;
+      if (k[i].l <= bot + 0.25 * height) nearBot++;
+    }
+    if (nearTop < 2 || nearBot < 2) continue;
+    let dir = 0;
+    for (let i = end; i < n - 1; i++) {
+      if (k[i].c > top) { dir = 1; break; }
+      if (k[i].c < bot) { dir = -1; break; }
+    }
+    if (!dir) continue;
+    const level = dir > 0 ? top : bot;
+    const sl = dir > 0 ? bot : top;
+    const mid = (top + bot) / 2;
+    if (Math.abs(r.price - level) > 0.35 * height) continue;
+    if (dir > 0 ? r.price < mid || r.price <= sl : r.price > mid || r.price >= sl) continue;
+    let tp = null;
+    const wing = 3;
+    for (let i = wing; i < start; i++) {
+      if (dir > 0) {
+        let hi = true;
+        for (let j = i - wing; j <= i + wing; j++) if (j !== i && k[j].h >= k[i].h) hi = false;
+        if (hi && k[i].h > level + height * 0.5 && (tp == null || k[i].h < tp)) tp = k[i].h;
+      } else {
+        let lo = true;
+        for (let j = i - wing; j <= i + wing; j++) if (j !== i && k[j].l <= k[i].l) lo = false;
+        if (lo && k[i].l < level - height * 0.5 && (tp == null || k[i].l > tp)) tp = k[i].l;
+      }
+    }
+    if (tp == null) continue;
+    const reward = Math.abs(tp - level);
+    const dist = Math.abs(level - sl);
+    if (!(reward > dist * 0.5 && dist > 0)) continue;
+    return { kind: "BREAKOUT", dir, ref: level, sl, dist, tp, reward, key: `${dir}:${level.toFixed(6)}` };
+  }
+  return null;
+}
+
+function gestion(plan, mk) {
+  const span = plan.tp - plan.ref;
+  const at = (q) => fmt(plan.ref + span * q, mk.dp);
+  return [`40 % (${at(0.4)}) : stop à l'entrée`, `60 % (${at(0.6)}) : stop en profit`, `80 % (${at(0.8)}) : tu peux fermer`];
 }
 
 function alertLive() {
@@ -627,20 +690,22 @@ function alertLive() {
   for (const r of reports) {
     const trend = spec.id === "scalping" ? null : trendPlan(r);
     const simple = spec.id === "swing" ? null : maxwellPlan(r);
-    const plan = trend || (simple ? { kind: "W", ref: simple.ref, sl: simple.sl, dist: simple.dist, tp: simple.neck, reward: Math.abs(simple.neck - simple.ref) } : null);
-    if (!plan || !r.pattern) continue;
-    const key = `${plan.kind}:${r.id}:${styleId}:${r.pattern.key}`;
+    const plan = trend || (simple ? { kind: "W", dir: r.dir, ref: simple.ref, sl: simple.sl, dist: simple.dist, tp: simple.neck, reward: Math.abs(simple.neck - simple.ref), key: r.pattern.key } : null) || breakoutPlan(r);
+    if (!plan) continue;
+    const key = `${plan.kind}:${r.id}:${styleId}:${plan.key}`;
     if (seen[key]) continue;
     seen[key] = Date.now();
     changed = true;
     const mk = MARKETS.find((m) => m.id === r.id);
-    const sens = r.dir < 0 ? "SELL" : "BUY";
+    const sens = plan.dir < 0 ? "SELL" : "BUY";
     const pct = pctText(r);
     const title = `${sens} ${plan.kind} ${pct} ${mk.name}`;
     const lines = [sens, plan.kind, pct, `${spec.label} ${spec.tf}`, `Entrée ${fmt(plan.ref, mk.dp)}`, `SL ${fmt(plan.sl, mk.dp)}`, `TP ${fmt(plan.tp, mk.dp)}`];
     if (plan.kind === "W") lines.push("Sortir au cou. Pas d'objectif plus loin.");
     else if (plan.kind === "PALIER") lines.push(`Palier ${plan.step}. Lot inférieur ou égal au précédent.`, "Garder jusqu'à l'objectif.");
-    else lines.push("Une seule entrée sur cette tendance.", "Garder jusqu'à l'objectif.");
+    else if (plan.kind === "TENDANCE") lines.push("Une seule entrée sur cette tendance.", "Garder jusqu'à l'objectif.");
+    else lines.push("Cassure confirmée. Entrée au pullback.", "Stop de l'autre côté de la consolidation.");
+    lines.push(...gestion(plan, mk));
     const body = lines.join("\n");
     if (store.get("ct.notif", false) && "Notification" in window && Notification.permission === "granted") {
       try { new Notification(title, { body, tag: key }); } catch (e) {}
