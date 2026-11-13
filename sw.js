@@ -1,5 +1,5 @@
-const CACHE = "catrade-v34";
-const SHELL = ["./index.html", "./style.css?v=22", "./app.js?v=52", "./engine.js?v=52", "./favicon.svg", "./icon-180.png", "./manifest.webmanifest"];
+const CACHE = "catrade-v35";
+const SHELL = ["./index.html", "./style.css?v=22", "./app.js?v=53", "./engine.js?v=53", "./favicon.svg", "./icon-180.png", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -15,7 +15,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin || event.request.method !== "GET") return;
   event.respondWith(
-    fetch(event.request).then((res) => {
+    fetch(event.request, { cache: "no-store" }).then((res) => {
       const copy = res.clone();
       caches.open(CACHE).then((cache) => cache.put(event.request, copy));
       return res;

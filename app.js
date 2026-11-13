@@ -27,6 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
+const BUILD = "53";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -544,6 +545,15 @@ async function scan() {
   const btn = $("#refresh");
   btn.disabled = true;
   btn.textContent = "Lecture…";
+  try {
+    const res = await fetch("./index.html?ts=" + Date.now(), { cache: "no-store" });
+    const html = await res.text();
+    const found = html.match(/app\.js\?v=(\d+)/);
+    if (found && found[1] !== BUILD) {
+      location.replace("./?v=" + found[1]);
+      return;
+    }
+  } catch (e) {}
   const spec = styleById(styleId);
   const list = MARKETS.filter((m) => m.aka === family);
   $("#status").textContent = `Lecture des prix : 0 sur ${list.length}`;
