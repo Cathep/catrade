@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "65";
+const BUILD = "66";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -389,7 +389,7 @@ function chartInner(r, plan) {
     const h = y(z.bottom) - yy;
     if (!(h > 0) || !Number.isFinite(yy)) return "";
     const left = local <= 0 ? 0 : x(local) - slot / 2;
-    const color = z.role === "entree" ? "var(--color-focus)" : "var(--color-level)";
+    const color = z.role === "entree" ? "var(--color-focus)" : "var(--color-sell)";
     return `<rect x="${left}" y="${yy}" width="${Math.max(1, W - left)}" height="${h}" fill="${color}" fill-opacity="0.22" stroke="${color}" stroke-opacity="0.85" stroke-width="1"/>`;
   }).join("");
   const bodyW = Math.max(2.2, slot * 0.62);
