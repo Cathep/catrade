@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "59";
+const BUILD = "60";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -332,17 +332,28 @@ function quoteOf(ccy) {
 }
 
 const chartFrom = {};
-const VIEW = 64;
+const chartView = {};
+const VIEW_MIN = 18;
 
-function chart(r, plan) {
-  const src = r.series && r.series.length >= (r.candles || []).length ? r.series : (r.candles || []);
-  if (src.length < 2 || r.price == null) return "";
-  const view = Math.min(VIEW, src.length);
+function sourceOf(r) {
+  return r.series && r.series.length >= (r.candles || []).length ? r.series : (r.candles || []);
+}
+
+function frameOf(r) {
+  const src = sourceOf(r);
+  const want = chartView[r.id] || 64;
+  const view = Math.max(Math.min(VIEW_MIN, src.length), Math.min(src.length, Math.round(want)));
   let start = chartFrom[r.id];
   if (start == null) start = src.length - view;
   start = Math.max(0, Math.min(src.length - view, Math.round(start)));
+  chartView[r.id] = view;
   chartFrom[r.id] = start;
-  const bars = src.slice(start, start + view);
+  return { src, view, start, bars: src.slice(start, start + view) };
+}
+
+function chartInner(r, plan) {
+  const { start, bars } = frameOf(r);
+  if (bars.length < 2 || r.price == null) return "";
   const zones = (r.zones || []).filter((z) => z.role === "directeur" || (plan && plan.kind === "W" && z.role === "entree"));
   const W = 300, H = 128;
   const hi = Math.max(...bars.map((b) => b.h));
@@ -379,39 +390,96 @@ function chart(r, plan) {
     guides = line(plan.ref, "var(--color-warn)", "2 3") + line(plan.sl, "var(--color-sell)", "1 3") + line(plan.tp, "var(--color-buy)", "4 3");
     if (plan.kind !== "W" && Math.abs(plan.objective - plan.tp) > plan.dist * 0.02) guides += line(plan.objective, "var(--color-focus)", "1 4");
   }
-  const svg = `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Glisse à droite pour voir plus tôt, à gauche pour revenir">${bands}${bodies}${guides}</svg>`;
-  return `<div class="chart-pan" data-id="${esc(r.id)}">${svg}<p class="panhint">Glisse à droite pour voir avant, à gauche pour revenir.</p></div>`;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Glisse pour déplacer. Pince ou utilise plus et moins pour zoomer.">${bands}${bodies}${guides}</svg><div class="chart-foot"><p class="panhint">Glisse pour déplacer.</p><div class="chart-tools"><button type="button" data-zoom="in" aria-label="Agrandir">+</button><button type="button" data-zoom="out" aria-label="Réduire">−</button></div></div>`;
+}
+
+function chart(r, plan) {
+  if (sourceOf(r).length < 2 || r.price == null) return "";
+  return `<div class="chart-pan" data-id="${esc(r.id)}">${chartInner(r, plan)}</div>`;
+}
+
+function repaintChart(id) {
+  const found = reports.find((x) => x.id === id);
+  const box = document.querySelector('.chart-pan[data-id="' + id + '"]');
+  if (!found || !box) return;
+  box.innerHTML = chartInner(found, CT.coursePlan(found, styleById(styleId)));
+}
+
+function zoomChart(id, factor) {
+  const found = reports.find((x) => x.id === id);
+  if (!found) return;
+  const src = sourceOf(found);
+  const view = chartView[id] || 64;
+  const start = chartFrom[id] == null ? src.length - view : chartFrom[id];
+  const next = Math.max(VIEW_MIN, Math.min(src.length, Math.round(view * factor)));
+  const anchor = start + view * 0.5;
+  chartView[id] = next;
+  chartFrom[id] = anchor - next * 0.5;
+  repaintChart(id);
 }
 
 let chartDrag = null;
+let chartPinch = null;
+const chartPoints = new Map();
 document.addEventListener("pointerdown", (e) => {
   const box = e.target.closest(".chart-pan");
-  if (!box) return;
+  if (!box || e.target.closest("button")) return;
+  chartPoints.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (chartPoints.size >= 2) {
+    const [a, b] = [...chartPoints.values()];
+    chartDrag = null;
+    chartPinch = {
+      id: box.dataset.id,
+      dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+      view: chartView[box.dataset.id] || 64,
+      start: chartFrom[box.dataset.id] || 0,
+    };
+    return;
+  }
   chartDrag = { id: box.dataset.id, x: e.clientX, y: e.clientY, start: chartFrom[box.dataset.id] || 0, locked: false, pid: e.pointerId };
 });
 document.addEventListener("pointermove", (e) => {
+  if (!chartPoints.has(e.pointerId)) return;
+  chartPoints.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (chartPinch && chartPoints.size >= 2) {
+    e.preventDefault();
+    const [a, b] = [...chartPoints.values()];
+    const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+    const found = reports.find((x) => x.id === chartPinch.id);
+    const limit = found ? sourceOf(found).length : 400;
+    const next = Math.max(VIEW_MIN, Math.min(limit, Math.round(chartPinch.view * (chartPinch.dist / dist))));
+    if (next === chartView[chartPinch.id]) return;
+    const anchor = chartPinch.start + chartPinch.view * 0.5;
+    chartView[chartPinch.id] = next;
+    chartFrom[chartPinch.id] = anchor - next * 0.5;
+    repaintChart(chartPinch.id);
+    return;
+  }
   if (!chartDrag || e.pointerId !== chartDrag.pid) return;
   const dx = e.clientX - chartDrag.x;
   const dy = e.clientY - chartDrag.y;
   if (!chartDrag.locked) {
     if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
-    if (Math.abs(dy) > Math.abs(dx)) { chartDrag = null; return; }
+    if (Math.abs(dy) > Math.abs(dx)) { chartDrag = null; chartPoints.delete(e.pointerId); return; }
     chartDrag.locked = true;
   }
   e.preventDefault();
   const box = document.querySelector('.chart-pan[data-id="' + chartDrag.id + '"]');
   if (!box) return;
-  const shift = Math.round(-dx / Math.max(6, box.clientWidth / VIEW));
+  const view = chartView[chartDrag.id] || 64;
+  const shift = Math.round(-dx / Math.max(6, box.clientWidth / view));
   const next = chartDrag.start + shift;
   if (next === chartFrom[chartDrag.id]) return;
   chartFrom[chartDrag.id] = next;
-  const found = reports.find((x) => x.id === chartDrag.id);
-  if (!found) return;
-  const plan = CT.coursePlan(found, styleById(styleId));
-  box.innerHTML = chart(found, plan).replace(/^<div class="chart-pan"[^>]*>|<\/div>$/g, "");
+  repaintChart(chartDrag.id);
 }, { passive: false });
-document.addEventListener("pointerup", (e) => { if (chartDrag && e.pointerId === chartDrag.pid) chartDrag = null; });
-document.addEventListener("pointercancel", () => { chartDrag = null; });
+function releasePoint(e) {
+  chartPoints.delete(e.pointerId);
+  if (chartPoints.size < 2) chartPinch = null;
+  if (chartDrag && e.pointerId === chartDrag.pid) chartDrag = null;
+}
+document.addEventListener("pointerup", releasePoint);
+document.addEventListener("pointercancel", releasePoint);
 
 function card(r, i) {
   const mk = MARKETS.find((m) => m.id === r.id);
@@ -833,6 +901,11 @@ function choose(id, c) {
 document.addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (!b) return;
+  if (b.dataset.zoom) {
+    const box = b.closest(".chart-pan");
+    if (box) zoomChart(box.dataset.id, b.dataset.zoom === "in" ? 0.7 : 1.45);
+    return;
+  }
   if (b.id === "refresh") scan();
   else if (b.id === "copyTopic") {
     const topic = $("#topic").textContent;

@@ -457,14 +457,36 @@ button { font: inherit; color: inherit; }
   display: block;
   border-radius: 12px;
   background: rgb(8 14 32 / 0.45);
+  touch-action: none;
 }
 .chart-pan {
   touch-action: pan-y;
   cursor: grab;
 }
 .chart-pan:active { cursor: grabbing; }
+.chart-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+.chart-tools {
+  display: flex;
+  gap: 0.35rem;
+}
+.chart-tools button {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--color-edge);
+  background: rgb(255 255 255 / 0.06);
+  font-weight: 600;
+  font-size: 1.1rem;
+  line-height: 1;
+}
 .panhint {
-  margin: 0.35rem 0 0;
+  margin: 0;
   color: var(--color-muted);
   font-size: 0.72rem;
 }
