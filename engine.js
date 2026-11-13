@@ -616,13 +616,12 @@ var CT = (() => {
   }
   function zoneRetest(r) {
     const price = r.price;
-    const bars = r.candles;
+    const bars = r.series.length >= 8 ? r.series : r.candles;
     if (price == null || bars.length < 8) return null;
     const bands = (r.zones ?? []).filter((z) => z.role === "directeur" && z.top > z.bottom);
     const last = bars[bars.length - 1];
-    const hit = bands.filter((z) => last.h >= z.bottom && last.l <= z.top && price >= z.bottom && price <= z.top);
-    hit.sort((a, b) => a.top - a.bottom - (b.top - b.bottom));
-    for (const z of hit) {
+    for (const z of bands) {
+      if (!(last.h >= z.bottom && last.l <= z.top)) continue;
       let origin = 0;
       for (let j = bars.length - 2; j >= Math.max(0, bars.length - 30); j--) {
         if (bars[j].c < z.bottom) {
@@ -635,18 +634,26 @@ var CT = (() => {
         }
       }
       if (!origin) continue;
+      const cameBack = origin === -1 ? last.c < z.bottom : last.c > z.top;
+      if (!cameBack) continue;
       const dir = origin === -1 ? -1 : 1;
-      const sl = dir < 0 ? z.top : z.bottom;
-      const ref = price;
+      let extreme = dir < 0 ? z.top : z.bottom;
+      for (let j = bars.length - 1; j >= Math.max(0, bars.length - 6); j--) {
+        const b = bars[j];
+        if (!(b.h >= z.bottom && b.l <= z.top)) break;
+        extreme = dir < 0 ? Math.max(extreme, b.h) : Math.min(extreme, b.l);
+      }
+      const pad = (r.atr && r.atr > 0 ? r.atr : last.h - last.l) * 0.12;
+      const sl = dir < 0 ? extreme + pad : extreme - pad;
+      const ref = dir < 0 ? z.bottom : z.top;
+      if (dir < 0 ? !(ref < sl) : !(ref > sl)) continue;
       const dist = Math.abs(ref - sl);
-      if (!(dist > (z.top - z.bottom) * 0.2)) continue;
       const next = bands.filter((o) => o !== z && (dir < 0 ? o.top < ref : o.bottom > ref)).sort((a, b) => dir < 0 ? b.top - a.top : a.bottom - b.bottom)[0];
-      const look = bars.slice(-30, -1);
-      const leg = dir < 0 ? Math.min(...look.map((b) => b.l)) : Math.max(...look.map((b) => b.h));
-      const tp = next ? dir < 0 ? next.top : next.bottom : leg;
+      if (!next) continue;
+      const tp = dir < 0 ? next.top : next.bottom;
       if (dir < 0 ? !(tp < ref) : !(tp > ref)) continue;
       const reward = Math.abs(tp - ref);
-      if (!(reward > dist * 0.4)) continue;
+      if (!(reward > dist)) continue;
       return {
         kind: "ZONE",
         dir,
@@ -658,7 +665,7 @@ var CT = (() => {
         reward,
         step: 0,
         key: `zone:${z.bottom.toFixed(4)}:${z.top.toFixed(4)}`,
-        note: "Prix revenu sur la zone. Stop de l'autre c\xF4t\xE9. Sortie sur la zone d'apr\xE8s."
+        note: "La zone a \xE9t\xE9 touch\xE9e et le prix en est reparti. Stop derri\xE8re la m\xE8che. Sortie sur la zone d'apr\xE8s."
       };
     }
     return null;
@@ -795,6 +802,21 @@ var CT = (() => {
         continue;
       }
       skip = plan.key;
+      if (plan.kind === "ZONE") {
+        const taken = simulateTrade(P.k, i + 1, plan.dir, plan.ref, plan.sl, plan.tp, style.maxBars, mk.cost);
+        const held = simulateTrade(P.k, i + 1, plan.dir, plan.ref, plan.sl, plan.tp, 120, mk.cost);
+        out.push({
+          kind: plan.kind,
+          dir: plan.dir,
+          filled: true,
+          raw: taken?.raw ?? null,
+          managed: taken?.managed ?? null,
+          held: held?.raw ?? null,
+          atMarket: null
+        });
+        i = (taken?.raw.at ?? i) + 1;
+        continue;
+      }
       const look = Math.min(n - 1, i + style.maxBars);
       let fill = null;
       let sameBar = null;
