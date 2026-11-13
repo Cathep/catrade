@@ -427,37 +427,23 @@ var CT = (() => {
       side: s.side,
       n: s.n
     })).sort((a, b) => (a.top + a.bottom) / 2 - (b.top + b.bottom) / 2);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (let n = 1; n < drafts.length - 1; n++) {
-        const left = drafts[n].bottom - drafts[n - 1].top;
-        const right = drafts[n + 1].bottom - drafts[n].top;
-        const h = drafts[n].top - drafts[n].bottom;
-        if (left < h * 2 && right < h * 2) {
-          drafts.splice(n, 1);
-          changed = true;
-          break;
-        }
-      }
+    let changed = drafts.slice().sort((a, b) => a.bottom - b.bottom);
+    const groups = [];
+    for (const d of changed) {
+      const g = groups[groups.length - 1];
+      const prev = g?.[g.length - 1];
+      const close = prev && d.bottom - prev.top < (prev.top - prev.bottom) * 3;
+      if (close) g.push(d);
+      else groups.push([d]);
     }
-    changed = true;
-    while (changed) {
-      changed = false;
-      for (let n = 0; n < drafts.length - 1; n++) {
-        if (drafts[n + 1].bottom - drafts[n].top < (drafts[n].top - drafts[n].bottom) * 1.5) {
-          const drop = drafts[n].n < drafts[n + 1].n ? n : n + 1;
-          drafts.splice(drop, 1);
-          changed = true;
-          break;
-        }
-      }
+    let kept = [];
+    for (const g of groups) {
+      if (g.length >= 3) kept.push(g[0], g[g.length - 1]);
+      else if (g.length === 2) kept.push(g[0].n >= g[1].n ? g[0] : g[1]);
+      else kept.push(g[0]);
     }
-    if (drafts.length > 5) {
-      const ranked = drafts.slice().sort((a, b) => b.n - a.n).slice(0, 5);
-      drafts = ranked.sort((a, b) => a.bottom - b.bottom);
-    }
-    zones.push(...drafts.map((d) => ({ role: d.role, top: d.top, bottom: d.bottom, from: d.from, side: d.side })));
+    if (kept.length > 5) kept = kept.sort((a, b) => b.n - a.n).slice(0, 5);
+    zones.push(...kept.sort((a, b) => a.bottom - b.bottom).map((d) => ({ role: d.role, top: d.top, bottom: d.bottom, from: d.from, side: d.side })));
     return zones;
   }
   function zonesOn(k, style, pattern) {
