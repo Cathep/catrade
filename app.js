@@ -81,8 +81,6 @@ const LOT_SPEC = {
   "Step Index 1000": { min: 0.1, max: 270, contract: 10, ccy: "USD" },
   "Step Index 1500": { min: 0.1, max: 270, contract: 10, ccy: "USD" },
   "Step Index 2000": { min: 0.1, max: 270, contract: 10, ccy: "USD" },
-  "Bear Market Index": { min: 0.01, max: 100, contract: 1, ccy: "USD" },
-  "Bull Market Index": { min: 0.01, max: 100, contract: 1, ccy: "USD" },
   "XAUUSD": { min: 0.01, max: 30, contract: 100, ccy: "USD" },
   "Palladium/USD": { min: 0.01, max: 10, contract: 100, ccy: "XPD" },
   "Platinum/USD": { min: 0.01, max: 10, contract: 100, ccy: "XPT" },
