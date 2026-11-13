@@ -484,7 +484,7 @@ function courseCard(r, plan, i) {
     <div class="head"><div><p class="name">${esc(mk.name)}<span class="buf">${esc(spec.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div>
       <div class="ring" style="--p:65;--ringc:var(--color-buy)"><b>cou<small>la sortie</small></b></div>
     </div>
-    <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="kind" data-k="${esc(plan.kind)}">${esc(plan.kind)}</span><span class="subcall">${esc(plan.note)}</span></div>
+    <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="kind" data-k="${esc(plan.kind)}">${plan.kind === "ZONE" ? "Zone" : esc(plan.kind)}</span><span class="subcall">${esc(plan.note)}</span></div>
     ${chart(r, plan)}
     <p class="legend"><span><i class="zn entz"></i>zone du W</span><span><i class="zn dirz"></i>niveau</span><span><i class="ln ent"></i>entrée</span><span><i class="ln sln"></i>stop</span><span><i class="ln tpn"></i>cou</span></p>
     <div class="rail" aria-hidden="true"><i style="width:${pct}%"></i></div>
@@ -493,7 +493,7 @@ function courseCard(r, plan, i) {
       <div><dt>Stop</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${esc(distText(mk, plan.dist))}</span></div>
       <div><dt>Sortie</dt><dd class="tp">${fmt(plan.tp, mk.dp)}</dd><span>le cou</span></div>
     </dl>
-    <p class="stack">On tient jusqu'au cou, sans rapprocher le stop. ${esc(spec.stack)}</p>
+    <p class="stack">${plan.kind === "ZONE" ? "Stop de l'autre côté de la zone. Sortie sur la zone d'après." : "On tient jusqu'au cou, sans rapprocher le stop."} ${esc(spec.stack)}</p>
     ${actions}
   </article>`;
 }

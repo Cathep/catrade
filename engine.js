@@ -378,69 +378,64 @@ var CT = (() => {
           top = edge.top;
         }
       }
-      if (top > bottom) zones.push({ role: "entree", top, bottom, from: pattern.i1 });
+      if (top > bottom) zones.push({ role: "entree", top, bottom, from: pattern.i1, side: "w" });
     }
-    const wing = style.wing;
-    const start = Math.max(wing, i - 160);
+    const start = Math.max(style.wing, i - 180);
     const ranges = [];
     for (let j = Math.max(0, i - 40); j <= i; j++) ranges.push(k[j].h - k[j].l);
-    ranges.sort((x, y) => x - y);
+    ranges.sort((a, b) => a - b);
     const typical = ranges.length ? ranges[ranges.length >> 1] : 0;
-    const cluster = (pts, side) => {
-      const items = pts.filter((p) => p >= start && p <= i).map((p) => ({ p, px: side === "l" ? k[p].l : k[p].h })).sort((a, b) => a.px - b.px || a.p - b.p);
+    const collect = (side) => {
+      if (!(typical > 0)) return [];
+      const src = side === "h" ? P.pivH : P.pivL;
+      const seg = src.filter((p) => p >= start && p + style.wing <= i).map((p) => ({
+        p,
+        ext: side === "h" ? k[p].h : k[p].l,
+        base: side === "h" ? Math.min(k[p].o, k[p].c) : Math.max(k[p].o, k[p].c)
+      })).sort((a, b) => a.ext - b.ext);
       const groups = [];
-      for (const it of items) {
+      for (const s of seg) {
         const g = groups[groups.length - 1];
-        if (g && typical > 0 && it.px - g[0].px <= typical) g.push(it);
-        else groups.push([it]);
+        if (g && Math.abs(s.ext - g.anchor) <= typical) g.items.push(s);
+        else groups.push({ anchor: s.ext, items: [s] });
       }
-      const out = [];
+      const built = [];
       for (const g of groups) {
-        if (g.length < 2) continue;
-        let bottom = Math.min(...g.map((x) => x.px));
-        let top = Math.max(...g.map((x) => x.px));
-        if (!(top > bottom)) {
-          const edge = bandOf(k[g[g.length - 1].p], side);
-          if (!edge) continue;
-          bottom = edge.bottom;
-          top = edge.top;
-        }
+        if (g.items.length < 2) continue;
+        const top = side === "h" ? Math.max(...g.items.map((s) => s.ext)) : Math.max(...g.items.map((s) => s.base));
+        const bottom = side === "h" ? Math.min(...g.items.map((s) => s.base)) : Math.min(...g.items.map((s) => s.ext));
         if (!(top > bottom)) continue;
-        zones.push({ role: "directeur", top, bottom, from: Math.min(...g.map((x) => x.p)) });
-        out.push(zones[zones.length - 1]);
+        built.push({
+          role: "directeur",
+          top,
+          bottom,
+          from: Math.min(...g.items.map((s) => s.p)),
+          side
+        });
       }
-      return out;
+      built.sort((a, b) => a.bottom - b.bottom);
+      const merged = [];
+      for (const z of built) {
+        const last = merged[merged.length - 1];
+        if (last && z.bottom <= last.top) {
+          last.top = Math.max(last.top, z.top);
+          last.bottom = Math.min(last.bottom, z.bottom);
+          last.from = Math.min(last.from, z.from);
+        } else merged.push({ ...z });
+      }
+      return merged;
     };
-    const lows = usable(P.pivL, i, wing);
-    const highs = usable(P.pivH, i, wing);
-    let dirs = [...cluster(lows, "l"), ...cluster(highs, "h")];
-    dirs.sort((a, b) => (a.bottom + a.top) / 2 - (b.bottom + b.top) / 2);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (let n = 1; n < dirs.length - 1; n++) {
-        const gapL = dirs[n].bottom - dirs[n - 1].top;
-        const gapR = dirs[n + 1].bottom - dirs[n].top;
-        const thin = Math.min(
-          dirs[n].top - dirs[n].bottom,
-          dirs[n - 1].top - dirs[n - 1].bottom,
-          dirs[n + 1].top - dirs[n + 1].bottom
-        );
-        if (gapL < thin && gapR < thin) {
-          const drop = dirs[n];
-          dirs.splice(n, 1);
-          const at = zones.indexOf(drop);
-          if (at >= 0) zones.splice(at, 1);
-          changed = true;
-          break;
-        }
-      }
-    }
     const price = k[i].c;
-    const keep = new Set(
-      dirs.slice().sort((a, b) => Math.abs((a.top + a.bottom) / 2 - price) - Math.abs((b.top + b.bottom) / 2 - price)).slice(0, 5)
-    );
-    return zones.filter((z) => z.role === "entree" || keep.has(z));
+    const bands = [...collect("h"), ...collect("l")];
+    const dist = (z) => price >= z.bottom && price <= z.top ? 0 : Math.min(Math.abs(price - z.top), Math.abs(price - z.bottom));
+    const nearest = bands.slice().sort((a, b) => dist(a) - dist(b)).slice(0, 3);
+    const high = bands.slice().sort((a, b) => b.top - a.top)[0];
+    const low = bands.slice().sort((a, b) => a.bottom - b.bottom)[0];
+    const keep = new Set(nearest);
+    if (high) keep.add(high);
+    if (low) keep.add(low);
+    zones.push(...keep);
+    return zones;
   }
   function zonesOn(k, style, pattern) {
     if (k.length < 16) return [];
@@ -610,8 +605,59 @@ var CT = (() => {
     }
     return null;
   }
+  function zoneRetest(r) {
+    const price = r.price;
+    const bars = r.candles;
+    if (price == null || bars.length < 8) return null;
+    const bands = (r.zones ?? []).filter((z) => z.role === "directeur" && z.top > z.bottom);
+    const last = bars[bars.length - 1];
+    const hit = bands.filter((z) => last.h >= z.bottom && last.l <= z.top && price >= z.bottom && price <= z.top);
+    hit.sort((a, b) => a.top - a.bottom - (b.top - b.bottom));
+    for (const z of hit) {
+      let origin = 0;
+      for (let j = bars.length - 2; j >= Math.max(0, bars.length - 30); j--) {
+        if (bars[j].c < z.bottom) {
+          origin = -1;
+          break;
+        }
+        if (bars[j].c > z.top) {
+          origin = 1;
+          break;
+        }
+      }
+      if (!origin) continue;
+      const dir = origin === -1 ? -1 : 1;
+      const sl = dir < 0 ? z.top : z.bottom;
+      const ref = price;
+      const dist = Math.abs(ref - sl);
+      if (!(dist > (z.top - z.bottom) * 0.2)) continue;
+      const next = bands.filter((o) => o !== z && (dir < 0 ? o.top < ref : o.bottom > ref)).sort((a, b) => dir < 0 ? b.top - a.top : a.bottom - b.bottom)[0];
+      const look = bars.slice(-30, -1);
+      const leg = dir < 0 ? Math.min(...look.map((b) => b.l)) : Math.max(...look.map((b) => b.h));
+      const tp = next ? dir < 0 ? next.top : next.bottom : leg;
+      if (dir < 0 ? !(tp < ref) : !(tp > ref)) continue;
+      const reward = Math.abs(tp - ref);
+      if (!(reward > dist * 0.4)) continue;
+      return {
+        kind: "ZONE",
+        dir,
+        ref,
+        sl,
+        dist,
+        tp,
+        objective: tp,
+        reward,
+        step: 0,
+        key: `zone:${z.bottom.toFixed(4)}:${z.top.toFixed(4)}`,
+        note: "Prix revenu sur la zone. Stop de l'autre c\xF4t\xE9. Sortie sur la zone d'apr\xE8s."
+      };
+    }
+    return null;
+  }
   function coursePlan(r, style) {
     if (r.price == null || r.state === "agite" || r.state === "ferme" || r.state === "erreur") return null;
+    const atZone = zoneRetest(r);
+    if (atZone) return atZone;
     if (r.reasonCode === "LOCAL_AGAINST_CONTEXT") return null;
     const simple = wSetup(r);
     if (!simple || style.id === "swing") return null;
@@ -1113,7 +1159,7 @@ var CT = (() => {
     const record = backtest(P, style, manual, mk, weekend);
     const days = Math.round((closed.length - style.warm) * style.step / 86400);
     const spark = closed.slice(-59).map((x) => x.c).concat([price]);
-    const window = 48;
+    const window = 120;
     const sliceFrom = Math.max(0, closed.length - window);
     const candles = closed.slice(sliceFrom).concat(live ? [live] : []);
     const shared = {
