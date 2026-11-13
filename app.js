@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "60";
+const BUILD = "61";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -275,9 +275,9 @@ function openDeriv() {
   return derivOpen;
 }
 
-function askDeriv(symbol, granularity) {
+function askDeriv(symbol, granularity, end) {
   return openDeriv().then((ws) => new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { ws.removeEventListener("message", onMsg); reject(new Error("délai")); }, 8000);
+    const timer = setTimeout(() => { ws.removeEventListener("message", onMsg); reject(new Error("délai")); }, 12000);
     function onMsg(ev) {
       let j;
       try { j = JSON.parse(ev.data); } catch (e) { return; }
@@ -292,7 +292,7 @@ function askDeriv(symbol, granularity) {
     }
     ws.addEventListener("message", onMsg);
     ws.send(JSON.stringify({
-      ticks_history: symbol, adjust_start_time: 1, count: 800, end: "latest", start: 1, style: "candles", granularity,
+      ticks_history: symbol, adjust_start_time: 1, count: end ? 2500 : 2500, end: end || "latest", start: 1, style: "candles", granularity,
     }));
   }));
 }
@@ -390,7 +390,7 @@ function chartInner(r, plan) {
     guides = line(plan.ref, "var(--color-warn)", "2 3") + line(plan.sl, "var(--color-sell)", "1 3") + line(plan.tp, "var(--color-buy)", "4 3");
     if (plan.kind !== "W" && Math.abs(plan.objective - plan.tp) > plan.dist * 0.02) guides += line(plan.objective, "var(--color-focus)", "1 4");
   }
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Glisse pour déplacer. Pince ou utilise plus et moins pour zoomer.">${bands}${bodies}${guides}</svg><div class="chart-foot"><p class="panhint">Glisse pour déplacer.</p><div class="chart-tools"><button type="button" data-zoom="in" aria-label="Agrandir">+</button><button type="button" data-zoom="out" aria-label="Réduire">−</button></div></div>`;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Glisse à droite pour remonter plus loin dans le temps.">${bands}${bodies}${guides}</svg><div class="chart-foot"><p class="panhint">À droite, plus loin dans le temps.</p><div class="chart-tools"><button type="button" data-zoom="in" aria-label="Agrandir">+</button><button type="button" data-zoom="out" aria-label="Réduire">−</button></div></div>`;
 }
 
 function chart(r, plan) {
@@ -403,6 +403,30 @@ function repaintChart(id) {
   const box = document.querySelector('.chart-pan[data-id="' + id + '"]');
   if (!found || !box) return;
   box.innerHTML = chartInner(found, CT.coursePlan(found, styleById(styleId)));
+}
+
+const olderBusy = {};
+async function moreHistory(id) {
+  if (olderBusy[id]) return;
+  const found = reports.find((x) => x.id === id);
+  const src = found ? sourceOf(found) : [];
+  if (!src.length || (chartFrom[id] || 0) > 2) return;
+  olderBusy[id] = true;
+  try {
+    const spec = styleById(styleId);
+    const older = await askDeriv(id, spec.step, src[0].t - spec.step);
+    const known = new Set(src.map((c) => c.t));
+    const add = (older || []).filter((c) => c.t < src[0].t && !known.has(c.t)).sort((a, b) => a.t - b.t);
+    if (add.length) {
+      found.series = add.concat(src);
+      if (found.zones) found.zones.forEach((z) => { z.from += add.length; });
+      chartFrom[id] = (chartFrom[id] || 0) + add.length;
+      if (chartDrag && chartDrag.id === id) chartDrag.start += add.length;
+      if (chartPinch && chartPinch.id === id) chartPinch.start += add.length;
+      repaintChart(id);
+    }
+  } catch (e) {}
+  olderBusy[id] = false;
 }
 
 function zoomChart(id, factor) {
@@ -437,6 +461,7 @@ document.addEventListener("pointerdown", (e) => {
     return;
   }
   chartDrag = { id: box.dataset.id, x: e.clientX, y: e.clientY, start: chartFrom[box.dataset.id] || 0, locked: false, pid: e.pointerId };
+  try { box.setPointerCapture(e.pointerId); } catch (err) {}
 });
 document.addEventListener("pointermove", (e) => {
   if (!chartPoints.has(e.pointerId)) return;
@@ -459,8 +484,8 @@ document.addEventListener("pointermove", (e) => {
   const dx = e.clientX - chartDrag.x;
   const dy = e.clientY - chartDrag.y;
   if (!chartDrag.locked) {
-    if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
-    if (Math.abs(dy) > Math.abs(dx)) { chartDrag = null; chartPoints.delete(e.pointerId); return; }
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    if (Math.abs(dx) < Math.abs(dy) * 0.8) { chartDrag = null; chartPoints.delete(e.pointerId); return; }
     chartDrag.locked = true;
   }
   e.preventDefault();
@@ -472,6 +497,7 @@ document.addEventListener("pointermove", (e) => {
   if (next === chartFrom[chartDrag.id]) return;
   chartFrom[chartDrag.id] = next;
   repaintChart(chartDrag.id);
+  if (next <= 0) moreHistory(chartDrag.id);
 }, { passive: false });
 function releasePoint(e) {
   chartPoints.delete(e.pointerId);
