@@ -525,39 +525,38 @@ function pctText(r) {
   return `${Math.round((100 * r.record.wins) / r.record.n)} %`;
 }
 
-function grade(r) {
+function maxwellPlan(r) {
   const p = r.pattern;
-  const rr = r.levels?.rr || 0;
-  if (!p) return "NUL";
-  const complete = p.slow && p.secondPart && p.reintegrated && !p.tooFar && !p.slHit && !p.tpHit && !r.opposed;
-  if (complete && rr >= 2) return "MEILLEUR";
-  if (rr >= 1 && p.reintegrated && !p.tooFar && !p.slHit && !p.tpHit) return "MOYEN";
-  return "NUL";
+  if (!p || !p.slow || !p.secondPart || r.price == null) return null;
+  const span = p.dir > 0 ? p.neck - p.ext1 : p.ext1 - p.neck;
+  if (!(span > 0)) return null;
+  const progress = p.dir > 0 ? (r.price - p.ext1) / span : (p.ext1 - r.price) / span;
+  if (!(progress >= 0 && progress <= 0.3)) return null;
+  const pad = (r.atr || 0) * 0.12;
+  const sl = p.dir > 0 ? Math.min(p.ext1, p.ext2) - pad : Math.max(p.ext1, p.ext2) + pad;
+  if (p.dir > 0 ? r.price <= sl : r.price >= sl) return null;
+  const dist = Math.abs(p.ext1 - sl);
+  if (!(dist > 0)) return null;
+  return { ref: p.ext1, neck: p.neck, sl, dist };
 }
 
 function alertLive() {
   const spec = styleById(styleId);
-  if (spec.id === "scalping") return;
+  if (spec.id === "swing") return;
   const seen = store.get("ct.ntfy", {});
   let changed = false;
   for (const r of reports) {
-    if (!openNow(r) || !r.pattern?.reintegrated || r.opposed) continue;
+    const plan = maxwellPlan(r);
+    if (!plan || !r.pattern) continue;
     const key = `${r.id}:${styleId}:${r.pattern.key}`;
     if (seen[key]) continue;
     seen[key] = Date.now();
     changed = true;
     const mk = MARKETS.find((m) => m.id === r.id);
-    const plan = planOf(r);
-    const tps = (plan?.tps || []).slice();
-    if (plan?.dist > 0 && tps.length) {
-      const two = r.dir > 0 ? plan.entry + 2 * plan.dist : plan.entry - 2 * plan.dist;
-      if (tps.every((t) => Math.abs(t.price - two) > plan.dist * 0.2)) tps.push({ price: two, reward: 2 * plan.dist });
-    }
     const sens = r.dir < 0 ? "SELL" : "BUY";
-    const rang = grade(r);
     const pct = pctText(r);
-    const title = `${rang} ${pct} ${sens} ${mk.name}`;
-    const body = [rang, pct, sens, `${spec.label} ${spec.tf}`, `Entrée ${fmt(plan.entry, mk.dp)}`, `SL ${fmt(plan.sl, mk.dp)}`, ...tps.map((t, i) => `TP ${i + 1} ${fmt(t.price, mk.dp)}`)].join("\n");
+    const title = `${sens} ${pct} ${mk.name}`;
+    const body = [sens, pct, `${spec.label} ${spec.tf}`, "Second creux lent, deuxième partie", `Entrée ${fmt(plan.ref, mk.dp)}`, `SL ${fmt(plan.sl, mk.dp)}`, `TP ${fmt(plan.neck, mk.dp)}`, "Sortir au cou. Pas d'objectif plus loin."].join("\n");
     if (store.get("ct.notif", false) && "Notification" in window && Notification.permission === "granted") {
       try { new Notification(title, { body, tag: key }); } catch (e) {}
     }

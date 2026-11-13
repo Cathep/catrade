@@ -106,13 +106,19 @@ function pctText(r) {
   return `${Math.round((100 * r.record.wins) / r.record.n)} %`;
 }
 
-function grade(r) {
+function maxwellPlan(r) {
   const p = r.pattern;
-  const rr = r.levels?.rr || 0;
-  const complete = p.slow && p.secondPart && p.reintegrated && !p.tooFar && !p.slHit && !p.tpHit && !r.opposed;
-  if (complete && rr >= 2) return "MEILLEUR";
-  if (rr >= 1 && p.reintegrated && !p.tooFar && !p.slHit && !p.tpHit) return "MOYEN";
-  return "NUL";
+  if (!p || !p.slow || !p.secondPart || r.price == null) return null;
+  const span = p.dir > 0 ? p.neck - p.ext1 : p.ext1 - p.neck;
+  if (!(span > 0)) return null;
+  const progress = p.dir > 0 ? (r.price - p.ext1) / span : (p.ext1 - r.price) / span;
+  if (!(progress >= 0 && progress <= 0.3)) return null;
+  const pad = (r.atr || 0) * 0.12;
+  const sl = p.dir > 0 ? Math.min(p.ext1, p.ext2) - pad : Math.max(p.ext1, p.ext2) + pad;
+  if (p.dir > 0 ? r.price <= sl : r.price >= sl) return null;
+  const dist = Math.abs(p.ext1 - sl);
+  if (!(dist > 0)) return null;
+  return { ref: p.ext1, neck: p.neck, sl, dist };
 }
 
 const markets = MARKETS;
@@ -123,7 +129,7 @@ let sent = 0;
 
 try {
   for (const style of styles) {
-    if (!wanted && style.id === "scalping") continue;
+    if (!wanted && style.id === "swing") continue;
     for (const mk of markets) {
       let bars = cache.get(`${mk.id}:${style.step}`);
       if (!bars) {
@@ -137,25 +143,23 @@ try {
         await sleep(700);
       }
       const r = evaluate(mk, bars, now, style, true);
-      if (!r.pattern || r.state !== "avis" || !r.levels || !r.pattern.reintegrated || r.opposed) continue;
+      const plan = maxwellPlan(r);
+      if (!plan) continue;
       const id = `${mk.id}:${style.id}:${r.pattern.key}`;
       if (seen.has(id)) continue;
       const sell = r.dir < 0;
       const sens = sell ? "SELL" : "BUY";
-      const rang = grade(r);
       const pct = pctText(r);
-      const title = `${rang} ${pct} ${sens} ${mk.name}`;
-      const tps = (r.levels.tps && r.levels.tps.length ? r.levels.tps : [{ price: r.levels.tp, reward: r.levels.reward }]).slice();
-      const two = r.dir > 0 ? r.levels.entry + 2 * r.levels.dist : r.levels.entry - 2 * r.levels.dist;
-      if (r.levels.dist > 0 && tps.every((t) => Math.abs(t.price - two) > r.levels.dist * 0.2)) tps.push({ price: two, reward: 2 * r.levels.dist });
+      const title = `${sens} ${pct} ${mk.name}`;
       const body = [
-        rang,
-        pct,
         sens,
+        pct,
         `${style.label} ${style.tf}`,
-        `Entrée ${fmt(r.levels.entry, mk.dp)}`,
-        `SL ${fmt(r.levels.sl, mk.dp)} (${distText(mk, r.levels.dist)})`,
-        ...tps.map((t, i) => `TP ${i + 1} ${fmt(t.price, mk.dp)} (${distText(mk, t.reward)})`),
+        "Second creux lent, deuxième partie",
+        `Entrée ${fmt(plan.ref, mk.dp)}`,
+        `SL ${fmt(plan.sl, mk.dp)} (${distText(mk, plan.dist)})`,
+        `TP ${fmt(plan.neck, mk.dp)} (${distText(mk, Math.abs(plan.neck - plan.ref))})`,
+        "Sortir au cou. Pas d'objectif plus loin.",
         `Fermer au plus tard ${deadline(now, style)}.`,
       ].join("\n");
       await publish(title, body, sell);
