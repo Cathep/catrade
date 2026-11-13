@@ -614,69 +614,19 @@ var CT = (() => {
     }
     return null;
   }
-  function zoneRetest(r) {
-    const price = r.price;
-    const bars = r.series.length >= 8 ? r.series : r.candles;
-    if (price == null || bars.length < 8) return null;
-    const bands = (r.zones ?? []).filter((z) => z.role === "directeur" && z.top > z.bottom);
-    const last = bars[bars.length - 1];
-    for (const z of bands) {
-      if (!(last.h >= z.bottom && last.l <= z.top)) continue;
-      let origin = 0;
-      for (let j = bars.length - 2; j >= Math.max(0, bars.length - 30); j--) {
-        if (bars[j].c < z.bottom) {
-          origin = -1;
-          break;
-        }
-        if (bars[j].c > z.top) {
-          origin = 1;
-          break;
-        }
-      }
-      if (!origin) continue;
-      const cameBack = origin === -1 ? last.c < z.bottom : last.c > z.top;
-      if (!cameBack) continue;
-      const dir = origin === -1 ? -1 : 1;
-      let extreme = dir < 0 ? z.top : z.bottom;
-      for (let j = bars.length - 1; j >= Math.max(0, bars.length - 6); j--) {
-        const b = bars[j];
-        if (!(b.h >= z.bottom && b.l <= z.top)) break;
-        extreme = dir < 0 ? Math.max(extreme, b.h) : Math.min(extreme, b.l);
-      }
-      const pad = (r.atr && r.atr > 0 ? r.atr : last.h - last.l) * 0.12;
-      const sl = dir < 0 ? extreme + pad : extreme - pad;
-      const ref = dir < 0 ? z.bottom : z.top;
-      if (dir < 0 ? !(ref < sl) : !(ref > sl)) continue;
-      const dist = Math.abs(ref - sl);
-      const next = bands.filter((o) => o !== z && (dir < 0 ? o.top < ref : o.bottom > ref)).sort((a, b) => dir < 0 ? b.top - a.top : a.bottom - b.bottom)[0];
-      if (!next) continue;
-      const tp = dir < 0 ? next.top : next.bottom;
-      if (dir < 0 ? !(tp < ref) : !(tp > ref)) continue;
-      const reward = Math.abs(tp - ref);
-      if (!(reward > dist)) continue;
-      return {
-        kind: "ZONE",
-        dir,
-        ref,
-        sl,
-        dist,
-        tp,
-        objective: tp,
-        reward,
-        step: 0,
-        key: `zone:${z.bottom.toFixed(4)}:${z.top.toFixed(4)}`,
-        note: "La zone a \xE9t\xE9 touch\xE9e et le prix en est reparti. Stop derri\xE8re la m\xE8che. Sortie sur la zone d'apr\xE8s."
-      };
-    }
-    return null;
-  }
   function coursePlan(r, style) {
     if (r.price == null || r.state === "agite" || r.state === "ferme" || r.state === "erreur") return null;
-    const atZone = zoneRetest(r);
-    if (atZone) return atZone;
     if (r.reasonCode === "LOCAL_AGAINST_CONTEXT") return null;
     const simple = wSetup(r);
-    if (!simple || style.id === "swing") return null;
+    const pattern = r.pattern;
+    if (!simple || !pattern || style.id === "swing") return null;
+    const extreme = pattern.dir > 0 ? Math.min(pattern.ext1, pattern.ext2) : Math.max(pattern.ext1, pattern.ext2);
+    const onLevel = (r.zones ?? []).some((z) => {
+      if (z.role !== "directeur" || !(z.top > z.bottom)) return false;
+      const h = z.top - z.bottom;
+      return extreme >= z.bottom - h && extreme <= z.top + h;
+    });
+    if (!onLevel) return null;
     return {
       kind: "W",
       dir: simple.dir,
@@ -688,7 +638,7 @@ var CT = (() => {
       reward: Math.abs(simple.neck - simple.ref),
       step: 0,
       key: simple.key,
-      note: "Sortir au cou. On ne rapproche pas le stop."
+      note: "Double V sur la zone. Sans ce W, le retour sur la zone ne se prend pas. Sortir au cou."
     };
   }
   function gestionAt(plan, q) {
