@@ -145,7 +145,9 @@ try {
       const rang = grade(r);
       const pct = pctText(r);
       const title = `${rang} ${pct} ${sens} ${mk.name}`;
-      const tps = r.levels.tps && r.levels.tps.length ? r.levels.tps : [{ price: r.levels.tp, reward: r.levels.reward }];
+      const tps = (r.levels.tps && r.levels.tps.length ? r.levels.tps : [{ price: r.levels.tp, reward: r.levels.reward }]).slice();
+      const two = r.dir > 0 ? r.levels.entry + 2 * r.levels.dist : r.levels.entry - 2 * r.levels.dist;
+      if (r.levels.dist > 0 && tps.every((t) => Math.abs(t.price - two) > r.levels.dist * 0.2)) tps.push({ price: two, reward: 2 * r.levels.dist });
       const body = [
         rang,
         pct,

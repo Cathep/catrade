@@ -548,11 +548,16 @@ function alertLive() {
     changed = true;
     const mk = MARKETS.find((m) => m.id === r.id);
     const plan = planOf(r);
+    const tps = (plan?.tps || []).slice();
+    if (plan?.dist > 0 && tps.length) {
+      const two = r.dir > 0 ? plan.entry + 2 * plan.dist : plan.entry - 2 * plan.dist;
+      if (tps.every((t) => Math.abs(t.price - two) > plan.dist * 0.2)) tps.push({ price: two, reward: 2 * plan.dist });
+    }
     const sens = r.dir < 0 ? "SELL" : "BUY";
     const rang = grade(r);
     const pct = pctText(r);
     const title = `${rang} ${pct} ${sens} ${mk.name}`;
-    const body = [rang, pct, sens, `${spec.label} ${spec.tf}`, `Entrée ${fmt(plan.entry, mk.dp)}`, `SL ${fmt(plan.sl, mk.dp)}`, ...plan.tps.map((t, i) => `TP ${i + 1} ${fmt(t.price, mk.dp)}`)].join("\n");
+    const body = [rang, pct, sens, `${spec.label} ${spec.tf}`, `Entrée ${fmt(plan.entry, mk.dp)}`, `SL ${fmt(plan.sl, mk.dp)}`, ...tps.map((t, i) => `TP ${i + 1} ${fmt(t.price, mk.dp)}`)].join("\n");
     if (store.get("ct.notif", false) && "Notification" in window && Notification.permission === "granted") {
       try { new Notification(title, { body, tag: key }); } catch (e) {}
     }
