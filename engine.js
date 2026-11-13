@@ -380,61 +380,73 @@ var CT = (() => {
       }
       if (top > bottom) zones.push({ role: "entree", top, bottom, from: pattern.i1, side: "w" });
     }
-    const start = Math.max(style.wing, i - 180);
+    const winStart = Math.max(0, i - 100);
     const ranges = [];
     for (let j = Math.max(0, i - 40); j <= i; j++) ranges.push(k[j].h - k[j].l);
     ranges.sort((a, b) => a - b);
     const typical = ranges.length ? ranges[ranges.length >> 1] : 0;
-    const collect = (side) => {
-      if (!(typical > 0)) return [];
-      const src = side === "h" ? P.pivH : P.pivL;
-      const seg = src.filter((p) => p >= start && p + style.wing <= i).map((p) => ({
-        p,
-        ext: side === "h" ? k[p].h : k[p].l,
-        base: side === "h" ? Math.min(k[p].o, k[p].c) : Math.max(k[p].o, k[p].c)
-      })).sort((a, b) => a.ext - b.ext);
-      const groups = [];
-      for (const s of seg) {
-        const g = groups[groups.length - 1];
-        if (g && Math.abs(s.ext - g.anchor) <= typical) g.items.push(s);
-        else groups.push({ anchor: s.ext, items: [s] });
-      }
-      const built = [];
-      for (const g of groups) {
-        if (g.items.length < 2) continue;
-        const top = side === "h" ? Math.max(...g.items.map((s) => s.ext)) : Math.max(...g.items.map((s) => s.base));
-        const bottom = side === "h" ? Math.min(...g.items.map((s) => s.base)) : Math.min(...g.items.map((s) => s.ext));
-        if (!(top > bottom)) continue;
-        built.push({
-          role: "directeur",
-          top,
-          bottom,
-          from: Math.min(...g.items.map((s) => s.p)),
-          side
-        });
-      }
-      built.sort((a, b) => a.bottom - b.bottom);
-      const merged = [];
-      for (const z of built) {
-        const last = merged[merged.length - 1];
-        if (last && z.bottom <= last.top) {
-          last.top = Math.max(last.top, z.top);
-          last.bottom = Math.min(last.bottom, z.bottom);
-          last.from = Math.min(last.from, z.from);
-        } else merged.push({ ...z });
-      }
-      return merged;
+    if (!(typical > 0) || i < winStart + 4) return zones;
+    let lo = Infinity;
+    for (let j = winStart; j <= i; j++) lo = Math.min(lo, k[j].l);
+    const bins = /* @__PURE__ */ new Map();
+    const add = (px, side, at) => {
+      const id = Math.floor((px - lo) / typical);
+      const key = `${side}:${id}`;
+      const b = bins.get(key) ?? { id, n: 0, side, ext: px, from: at };
+      b.n += 1;
+      b.side = side;
+      if (side === "h" ? px > b.ext : px < b.ext) b.ext = px;
+      b.from = Math.min(b.from, at);
+      bins.set(key, b);
     };
+    for (let j = winStart + 2; j <= i - 2; j++) {
+      const h = k[j].h;
+      const l = k[j].l;
+      if (k[j - 1].h <= h && k[j - 2].h <= h && k[j + 1].h <= h && k[j + 2].h <= h) add(h, "h", j);
+      if (k[j - 1].l >= l && k[j - 2].l >= l && k[j + 1].l >= l && k[j + 2].l >= l) add(l, "l", j);
+    }
+    const hot = [...bins.values()].filter((b) => b.n >= 2).sort((a, b) => a.id - b.id);
+    const runs = [];
+    let cur = [];
+    for (const b of hot) {
+      if (cur.length && b.id > cur[cur.length - 1].id + 1) {
+        runs.push(cur);
+        cur = [b];
+      } else cur.push(b);
+    }
+    if (cur.length) runs.push(cur);
+    const levels = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const run of runs) {
+      const ends = run.length === 1 ? [run[0]] : [run[0], run[run.length - 1]];
+      for (const b of ends) {
+        if (seen.has(b.id)) continue;
+        seen.add(b.id);
+        levels.push(b);
+      }
+    }
     const price = k[i].c;
-    const bands = [...collect("h"), ...collect("l")];
-    const dist = (z) => price >= z.bottom && price <= z.top ? 0 : Math.min(Math.abs(price - z.top), Math.abs(price - z.bottom));
-    const nearest = bands.slice().sort((a, b) => dist(a) - dist(b)).slice(0, 3);
-    const high = bands.slice().sort((a, b) => b.top - a.top)[0];
-    const low = bands.slice().sort((a, b) => a.bottom - b.bottom)[0];
-    const keep = new Set(nearest);
-    if (high) keep.add(high);
-    if (low) keep.add(low);
-    zones.push(...keep);
+    const asZone = (b) => {
+      const top = b.side === "h" ? b.ext : b.ext + typical;
+      const bottom = b.side === "h" ? b.ext - typical : b.ext;
+      return { role: "directeur", top, bottom, from: b.from, side: b.side };
+    };
+    const away = (b) => {
+      const z = asZone(b);
+      return price >= z.bottom && price <= z.top ? 0 : Math.min(Math.abs(price - z.top), Math.abs(price - z.bottom));
+    };
+    const near = levels.slice().sort((a, b) => away(a) - away(b) || b.n - a.n)[0];
+    const summit = levels.filter((b) => b.side === "h").sort((a, b) => b.ext - a.ext)[0];
+    const picked = [];
+    for (const b of [near, summit]) {
+      if (!b || picked.some((p) => p.id === b.id || Math.abs(p.id - b.id) < 3)) continue;
+      picked.push(b);
+    }
+    if (picked.length < 2) {
+      const far = levels.filter((b) => !picked.some((p) => Math.abs(p.id - b.id) < 3)).sort((a, b) => away(b) - away(a))[0];
+      if (far) picked.push(far);
+    }
+    zones.push(...picked.slice(0, 2).map(asZone));
     return zones;
   }
   function zonesOn(k, style, pattern) {

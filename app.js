@@ -335,11 +335,11 @@ function quoteOf(ccy) {
 function chart(r, plan) {
   const bars = r.candles;
   if (!bars || bars.length < 2 || r.price == null) return "";
-  const zones = r.zones || [];
+  const zones = (r.zones || []).filter((z) => z.role === "directeur" || (plan && plan.kind === "W" && z.role === "entree"));
   const W = 300, H = 128;
   const marks = [];
   if (plan) marks.push(plan.ref, plan.sl, plan.tp, plan.objective);
-  if (r.pattern) marks.push(r.pattern.neck);
+  if (plan && plan.kind === "W" && r.pattern) marks.push(r.pattern.neck);
   for (const z of zones) marks.push(z.top, z.bottom);
   const hi = Math.max(...bars.map((b) => b.h), ...(marks.length ? marks : [-Infinity]));
   const lo = Math.min(...bars.map((b) => b.l), ...(marks.length ? marks : [Infinity]));
@@ -376,8 +376,6 @@ function chart(r, plan) {
   if (plan) {
     guides = line(plan.ref, "var(--color-warn)", "2 3") + line(plan.sl, "var(--color-sell)", "1 3") + line(plan.tp, "var(--color-buy)", "4 3");
     if (plan.kind !== "W" && Math.abs(plan.objective - plan.tp) > plan.dist * 0.02) guides += line(plan.objective, "var(--color-focus)", "1 4");
-  } else if (r.pattern) {
-    guides = line(r.pattern.neck, "var(--color-buy)", "4 3");
   }
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Bougies, zone du W et niveaux">${bands}${bodies}${guides}</svg>`;
 }
