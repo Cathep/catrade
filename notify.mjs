@@ -145,9 +145,7 @@ try {
       const rang = grade(r);
       const pct = pctText(r);
       const title = `${rang} ${pct} ${sens} ${mk.name}`;
-      const tps = r.levels.tps && r.levels.tps.length ? r.levels.tps : [{ price: r.levels.tp, reward: r.levels.reward, rr: r.levels.rr }];
-      const room = tps[0].rr ?? (r.levels.dist ? tps[0].reward / r.levels.dist : 0);
-      if (!(room >= 1)) continue;
+      const tps = r.levels.tps && r.levels.tps.length ? r.levels.tps : [{ price: r.levels.tp, reward: r.levels.reward }];
       const body = [
         rang,
         pct,
