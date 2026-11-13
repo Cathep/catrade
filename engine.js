@@ -36,7 +36,9 @@ var CT = (() => {
     proposeLevels: () => proposeLevels,
     replayCourse: () => replayCourse,
     simulateTrade: () => simulateTrade,
-    styleById: () => styleById
+    styleById: () => styleById,
+    traceZones: () => traceZones,
+    zonesOn: () => zonesOn
   });
   var STYLES = [
     {
@@ -353,6 +355,97 @@ var CT = (() => {
     }
     return null;
   }
+  function bandOf(c, side) {
+    if (side === "l") {
+      const top = Math.min(c.o, c.c);
+      return top > c.l ? { bottom: c.l, top } : null;
+    }
+    const bottom = Math.max(c.o, c.c);
+    return c.h > bottom ? { top: c.h, bottom } : null;
+  }
+  function traceZones(P, i, style, pattern) {
+    const k = P.k;
+    const zones = [];
+    if (pattern && k[pattern.i1] && k[pattern.i2]) {
+      const a = k[pattern.i1];
+      const b = k[pattern.i2];
+      let bottom = Math.min(pattern.ext1, pattern.ext2);
+      let top = Math.max(pattern.ext1, pattern.ext2);
+      if (!(top > bottom)) {
+        const edge = pattern.dir > 0 ? bandOf(b, "l") ?? bandOf(a, "l") : bandOf(b, "h") ?? bandOf(a, "h");
+        if (edge) {
+          bottom = edge.bottom;
+          top = edge.top;
+        }
+      }
+      if (top > bottom) zones.push({ role: "entree", top, bottom, from: pattern.i1 });
+    }
+    const wing = style.wing;
+    const start = Math.max(wing, i - 160);
+    const ranges = [];
+    for (let j = Math.max(0, i - 40); j <= i; j++) ranges.push(k[j].h - k[j].l);
+    ranges.sort((x, y) => x - y);
+    const typical = ranges.length ? ranges[ranges.length >> 1] : 0;
+    const cluster = (pts, side) => {
+      const items = pts.filter((p) => p >= start && p <= i).map((p) => ({ p, px: side === "l" ? k[p].l : k[p].h })).sort((a, b) => a.px - b.px || a.p - b.p);
+      const groups = [];
+      for (const it of items) {
+        const g = groups[groups.length - 1];
+        if (g && typical > 0 && it.px - g[0].px <= typical) g.push(it);
+        else groups.push([it]);
+      }
+      const out = [];
+      for (const g of groups) {
+        if (g.length < 2) continue;
+        let bottom = Math.min(...g.map((x) => x.px));
+        let top = Math.max(...g.map((x) => x.px));
+        if (!(top > bottom)) {
+          const edge = bandOf(k[g[g.length - 1].p], side);
+          if (!edge) continue;
+          bottom = edge.bottom;
+          top = edge.top;
+        }
+        if (!(top > bottom)) continue;
+        zones.push({ role: "directeur", top, bottom, from: Math.min(...g.map((x) => x.p)) });
+        out.push(zones[zones.length - 1]);
+      }
+      return out;
+    };
+    const lows = usable(P.pivL, i, wing);
+    const highs = usable(P.pivH, i, wing);
+    let dirs = [...cluster(lows, "l"), ...cluster(highs, "h")];
+    dirs.sort((a, b) => (a.bottom + a.top) / 2 - (b.bottom + b.top) / 2);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let n = 1; n < dirs.length - 1; n++) {
+        const gapL = dirs[n].bottom - dirs[n - 1].top;
+        const gapR = dirs[n + 1].bottom - dirs[n].top;
+        const thin = Math.min(
+          dirs[n].top - dirs[n].bottom,
+          dirs[n - 1].top - dirs[n - 1].bottom,
+          dirs[n + 1].top - dirs[n + 1].bottom
+        );
+        if (gapL < thin && gapR < thin) {
+          const drop = dirs[n];
+          dirs.splice(n, 1);
+          const at = zones.indexOf(drop);
+          if (at >= 0) zones.splice(at, 1);
+          changed = true;
+          break;
+        }
+      }
+    }
+    const price = k[i].c;
+    const keep = new Set(
+      dirs.slice().sort((a, b) => Math.abs((a.top + a.bottom) / 2 - price) - Math.abs((b.top + b.bottom) / 2 - price)).slice(0, 5)
+    );
+    return zones.filter((z) => z.role === "entree" || keep.has(z));
+  }
+  function zonesOn(k, style, pattern) {
+    if (k.length < 16) return [];
+    return traceZones(prepare(k, style), k.length - 1, style, pattern);
+  }
   function ahead(dir, entry, px, gap) {
     return dir > 0 ? px > entry + gap : px < entry - gap;
   }
@@ -613,6 +706,7 @@ var CT = (() => {
       series,
       origin: 0,
       pattern: jg.pattern,
+      zones: traceZones(P, i, style, jg.pattern),
       opposed: jg.opposed,
       notes: [],
       levels: null,
@@ -991,6 +1085,7 @@ var CT = (() => {
       series: [],
       origin: 0,
       pattern: null,
+      zones: [],
       opposed: false,
       notes: [],
       levels: null,
@@ -1033,12 +1128,13 @@ var CT = (() => {
       atr: P.atr[i] > 0 ? P.atr[i] : null
     };
     if (now - (closed[i].t + style.step) > style.step * 2 + 600) {
-      return { ...shared, why: "ancien", state: "erreur", reason: "Derni\xE8re bougie trop ancienne." };
+      return { ...shared, zones: traceZones(P, i, style, null), why: "ancien", state: "erreur", reason: "Derni\xE8re bougie trop ancienne." };
     }
     if (weekend && fxBlocked(now)) {
       const friday = new Date(now * 1e3).getUTCDay() === 5;
       return {
         ...shared,
+        zones: traceZones(P, i, style, null),
         state: "ferme",
         why: friday ? "vendredi" : "weekend",
         reason: friday ? "Pas de nouvelle entr\xE9e avant le week-end." : "March\xE9 ferm\xE9 le week-end."
@@ -1053,13 +1149,14 @@ var CT = (() => {
       }
     }
     const vr = jg.vr ?? volRatio(closed, i);
+    const zones = traceZones(P, i, style, jg.pattern);
     if (jg.verdict === "NO_TRADE" && jg.reasonCode === "MOVEMENT_NOT_CLEAR" && vr != null && vr > 2.15) {
-      return { ...shared, ...jg, vr, state: "agite", why: "agite", reason: `Trop agit\xE9 : le prix bouge ${vr.toFixed(1).replace(".", ",")} fois plus que d'habitude.` };
+      return { ...shared, ...jg, zones, vr, state: "agite", why: "agite", reason: `Trop agit\xE9 : le prix bouge ${vr.toFixed(1).replace(".", ",")} fois plus que d'habitude.` };
     }
     if (jg.verdict === "NO_TRADE") {
-      return { ...shared, ...jg, vr, state: "refus", why: jg.reasonCode };
+      return { ...shared, ...jg, zones, vr, state: "refus", why: jg.reasonCode };
     }
-    return { ...shared, ...jg, vr, state: "avis", why: null };
+    return { ...shared, ...jg, zones, vr, state: "avis", why: null };
   }
   function distText(mk, d) {
     if (mk.pip) return `${Math.round(d / mk.pip)} pips`;

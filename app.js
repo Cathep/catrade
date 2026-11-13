@@ -335,13 +335,31 @@ function quoteOf(ccy) {
 function chart(r, plan) {
   const bars = r.candles;
   if (!bars || bars.length < 2 || r.price == null) return "";
+  const zones = r.zones || [];
   const W = 300, H = 128;
-  const marks = plan ? [plan.ref, plan.sl, plan.tp, plan.objective] : [];
+  const marks = [];
+  if (plan) marks.push(plan.ref, plan.sl, plan.tp, plan.objective);
+  if (r.pattern) marks.push(r.pattern.neck);
+  for (const z of zones) marks.push(z.top, z.bottom);
   const hi = Math.max(...bars.map((b) => b.h), ...(marks.length ? marks : [-Infinity]));
   const lo = Math.min(...bars.map((b) => b.l), ...(marks.length ? marks : [Infinity]));
   const span = hi - lo || 1;
   const x = (i) => (i / (bars.length - 1)) * W;
   const y = (p) => 8 + ((hi - p) / span) * (H - 16);
+  const x0 = (from) => {
+    const local = from - (r.origin || 0);
+    if (local <= 0) return 0;
+    if (local >= bars.length - 1) return W;
+    return x(local);
+  };
+  const bands = zones.map((z, n) => {
+    const yy = y(z.top);
+    const h = y(z.bottom) - yy;
+    if (!(h > 0) || !Number.isFinite(yy)) return "";
+    const left = x0(z.from);
+    const color = z.role === "entree" ? "var(--color-focus)" : "var(--color-sell)";
+    return `<rect x="${left}" y="${yy}" width="${Math.max(1, W - left)}" height="${h}" fill="${color}" fill-opacity="0.22" stroke="${color}" stroke-opacity="0.85" stroke-width="1"/>`;
+  }).join("");
   const bodies = bars.map((b, i) => {
     const up = b.c >= b.o;
     const color = up ? "var(--color-buy)" : "var(--color-sell)";
@@ -358,8 +376,10 @@ function chart(r, plan) {
   if (plan) {
     guides = line(plan.ref, "var(--color-warn)", "2 3") + line(plan.sl, "var(--color-sell)", "1 3") + line(plan.tp, "var(--color-buy)", "4 3");
     if (plan.kind !== "W" && Math.abs(plan.objective - plan.tp) > plan.dist * 0.02) guides += line(plan.objective, "var(--color-focus)", "1 4");
+  } else if (r.pattern) {
+    guides = line(r.pattern.neck, "var(--color-buy)", "4 3");
   }
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Dernières bougies">${bodies}${guides}</svg>`;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Bougies, zone du W et niveaux">${bands}${bodies}${guides}</svg>`;
 }
 
 function card(r, i) {
@@ -466,7 +486,7 @@ function courseCard(r, plan, i) {
     </div>
     <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="kind" data-k="${esc(plan.kind)}">${esc(plan.kind)}</span><span class="subcall">${esc(plan.note)}</span></div>
     ${chart(r, plan)}
-    <p class="legend"><span><i class="ln ent"></i>entrée</span><span><i class="ln sln"></i>stop</span><span><i class="ln tpn"></i>sortie</span></p>
+    <p class="legend"><span><i class="zn entz"></i>zone du W</span><span><i class="zn dirz"></i>niveau</span><span><i class="ln ent"></i>entrée</span><span><i class="ln sln"></i>stop</span><span><i class="ln tpn"></i>cou</span></p>
     <div class="rail" aria-hidden="true"><i style="width:${pct}%"></i></div>
     <dl class="lv">
       <div><dt>Entrée</dt><dd>${fmt(plan.ref, mk.dp)}</dd></div>
@@ -490,7 +510,7 @@ function render(fresh) {
   if (othersTitle) othersTitle.textContent = rest.length ? `Les autres · ${rest.length}` : "Les autres";
   $("#others").innerHTML = rest.length ? rest.map((r) => {
     const mk = MARKETS.find((m) => m.id === r.id);
-    return `<li id="m-${esc(r.id)}"><b>${esc(mk.name)}</b><b>${r.price != null ? fmt(r.price, mk.dp) : "?"}</b><span>${esc(r.reason)}</span></li>`;
+    return `<li id="m-${esc(r.id)}"><b>${esc(mk.name)}</b><b>${r.price != null ? fmt(r.price, mk.dp) : "?"}</b><span>${esc(r.reason)}</span>${chart(r, null)}</li>`;
   }).join("") : `<li><span>${reports.length ? "Tous les marchés lus ont un setup mûr." : "Pas encore de lecture."}</span></li>`;
   const order = new Map(MARKETS.map((m, i) => [m.id, i]));
   const listed = reports.slice().sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
