@@ -498,6 +498,17 @@ function courseCard(r, plan, i) {
   </article>`;
 }
 
+function zoneCard(r, i) {
+  const mk = MARKETS.find((m) => m.id === r.id);
+  const spec = styleById(styleId);
+  return `<article class="card glass" id="m-${esc(r.id)}" style="--i:${i}">
+    <div class="head"><div><p class="name">${esc(mk.name)}<span class="buf">${esc(spec.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div></div>
+    <p class="subcall">${esc(r.reason || "Pas de W mûr.")}</p>
+    ${chart(r, null)}
+    <p class="legend"><span><i class="zn entz"></i>zone du W</span><span><i class="zn dirz"></i>niveau</span><span><i class="ln tpn"></i>cou</span></p>
+  </article>`;
+}
+
 function render(fresh) {
   const spec = styleById(styleId);
   const plans = reports.map((r) => ({ r, plan: CT.coursePlan(r, spec) })).filter((x) => x.plan);
@@ -505,12 +516,13 @@ function render(fresh) {
   const rest = reports.filter((r) => !plans.some((p) => p.r.id === r.id));
   const grid = $("#grid");
   grid.className = fresh ? "grid fresh" : "grid";
-  grid.innerHTML = plans.length ? plans.map((x, i) => courseCard(x.r, x.plan, i)).join("") : `<div class="glass empty">${!reports.length || busy ? "Lecture en cours." : "Aucun W mûr. On attend un creux lent, encore près de la ligne."}</div>`;
+  const cards = plans.map((x, i) => courseCard(x.r, x.plan, i)).concat(rest.map((r, i) => zoneCard(r, plans.length + i)));
+  grid.innerHTML = cards.length ? cards.join("") : `<div class="glass empty">${!reports.length || busy ? "Lecture en cours." : "Aucun prix reçu."}</div>`;
   const othersTitle = document.querySelector("summary.sec");
   if (othersTitle) othersTitle.textContent = rest.length ? `Les autres · ${rest.length}` : "Les autres";
   $("#others").innerHTML = rest.length ? rest.map((r) => {
     const mk = MARKETS.find((m) => m.id === r.id);
-    return `<li id="m-${esc(r.id)}"><b>${esc(mk.name)}</b><b>${r.price != null ? fmt(r.price, mk.dp) : "?"}</b><span>${esc(r.reason)}</span>${chart(r, null)}</li>`;
+    return `<li><b>${esc(mk.name)}</b><b>${r.price != null ? fmt(r.price, mk.dp) : "?"}</b><span>${esc(r.reason)}</span></li>`;
   }).join("") : `<li><span>${reports.length ? "Tous les marchés lus ont un setup mûr." : "Pas encore de lecture."}</span></li>`;
   const order = new Map(MARKETS.map((m, i) => [m.id, i]));
   const listed = reports.slice().sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
