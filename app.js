@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "57";
+const BUILD = "58";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -744,9 +744,13 @@ function gestion(plan, mk) {
   return [`40 % (${at(0.4)}) : stop à l'entrée`, `60 % (${at(0.6)}) : stop en profit`, `80 % (${at(0.8)}) : tu peux fermer`];
 }
 
-function alertLive() {
+async function alertLive() {
   const spec = styleById(styleId);
   const seen = store.get("ct.ntfy", {});
+  try {
+    const res = await fetch("./envoyees.json?ts=" + Date.now(), { cache: "no-store" });
+    if (res.ok) Object.assign(seen, await res.json());
+  } catch (e) {}
   let changed = false;
   for (const r of reports) {
     const plan = CT.coursePlan(r, spec);
@@ -766,7 +770,7 @@ function alertLive() {
       `SL ${fmt(plan.sl, mk.dp)}`,
       `Sortie ${fmt(plan.tp, mk.dp)}`,
       plan.note,
-      `SUIVI ${r.id} ${styleId} ${plan.dir} ${plan.ref} ${plan.sl} ${plan.tp}`,
+      `SUIVI ${r.id} ${styleId} ${plan.dir} ${plan.ref} ${plan.sl} ${plan.tp} ${key}`,
       "On tient jusqu'au cou. On ne rapproche pas le stop avant.",
     ].join("\n");
     if (store.get("ct.notif", false) && "Notification" in window && Notification.permission === "granted") {
@@ -828,7 +832,7 @@ document.addEventListener("click", (e) => {
       b.textContent = ok ? "Alertes actives" : "Activer les alertes";
       b.className = ok ? "btn on" : "btn";
       if (note) note.textContent = ok
-        ? "Alertes actives. Un nouveau W ou M seulement, tant que cette page reste ouverte."
+        ? "Alertes actives. La veille envoie même si cette page est fermée."
         : "Alerte refusée. Écran verrouillé : la veille Grok part à 8 h, 13 h et 18 h.";
       if (ok) alertLive();
     });
