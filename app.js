@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "62";
+const BUILD = "63";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -344,9 +344,10 @@ function frameOf(r) {
   const want = chartView[r.id] || 64;
   const view = Math.max(Math.min(VIEW_MIN, src.length), Math.min(src.length, Math.round(want)));
   const gap = Math.max(8, Math.round(view * 0.16));
-  const maxStart = Math.max(0, src.length - view + gap);
+  const minVisible = Math.max(10, Math.round(view * 0.18));
+  const maxStart = Math.max(0, src.length - minVisible);
   let start = chartFrom[r.id];
-  if (start == null) start = maxStart;
+  if (start == null) start = Math.max(0, Math.min(maxStart, src.length - view + gap));
   start = Math.max(0, Math.min(maxStart, Math.round(start)));
   chartView[r.id] = view;
   chartFrom[r.id] = start;
@@ -396,7 +397,7 @@ function chartInner(r, plan) {
     guides = line(plan.ref, "var(--color-warn)", "2 3") + line(plan.sl, "var(--color-sell)", "1 3") + line(plan.tp, "var(--color-buy)", "4 3");
     if (plan.kind !== "W" && Math.abs(plan.objective - plan.tp) > plan.dist * 0.02) guides += line(plan.objective, "var(--color-focus)", "1 4");
   }
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Espace vide à droite, là où le prix n'est pas encore arrivé.">${bands}${bodies}${guides}</svg><div class="chart-foot"><p class="panhint">À droite, le prix n'est pas encore là.</p><div class="chart-tools"><button type="button" data-zoom="in" aria-label="Agrandir">+</button><button type="button" data-zoom="out" aria-label="Réduire">−</button></div></div>`;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Tire vers la gauche pour ouvrir l'espace à droite.">${bands}${bodies}${guides}</svg><div class="chart-foot"><p class="panhint">Tire vers la gauche : l'espace vide s'ouvre à droite.</p><div class="chart-tools"><button type="button" data-zoom="in" aria-label="Agrandir">+</button><button type="button" data-zoom="out" aria-label="Réduire">−</button></div></div>`;
 }
 
 function chart(r, plan) {
