@@ -577,10 +577,11 @@ var CT = (() => {
   function wSetup(r) {
     const p = r.pattern;
     if (!p || !p.slow || !p.secondPart || p.slHit || p.tpHit || p.tooFar || r.price == null) return null;
-    const span = p.dir > 0 ? p.neck - p.ext1 : p.ext1 - p.neck;
+    const second = p.ext2;
+    const span = p.dir > 0 ? p.neck - second : second - p.neck;
     if (!(span > 0)) return null;
-    const progress = p.dir > 0 ? (r.price - p.ext1) / span : (p.ext1 - r.price) / span;
-    if (!(progress >= 0 && progress <= 0.2)) return null;
+    const progress = p.dir > 0 ? (r.price - second) / span : (second - r.price) / span;
+    if (!(progress >= -0.05 && progress <= 0.2)) return null;
     const pad = (r.atr || 0) * 0.12;
     const sl = p.dir > 0 ? Math.min(p.ext1, p.ext2) - pad : Math.max(p.ext1, p.ext2) + pad;
     if (p.dir > 0 ? r.price <= sl : r.price >= sl) return null;
@@ -807,21 +808,19 @@ var CT = (() => {
         const h = z.top - z.bottom;
         return extreme >= z.bottom - h && extreme <= z.top + h;
       });
-      if (onLevel) {
-        return {
-          kind: "W",
-          dir: simple.dir,
-          ref: simple.ref,
-          sl: simple.sl,
-          dist: simple.dist,
-          tp: simple.neck,
-          objective: simple.neck,
-          reward: Math.abs(simple.neck - simple.ref),
-          step: 0,
-          key: simple.key,
-          note: "Double V sur la zone. Sans ce W, le retour sur la zone ne se prend pas. Sortir au cou."
-        };
-      }
+      return {
+        kind: "W",
+        dir: simple.dir,
+        ref: simple.ref,
+        sl: simple.sl,
+        dist: simple.dist,
+        tp: simple.neck,
+        objective: simple.neck,
+        reward: Math.abs(simple.neck - simple.ref),
+        step: 0,
+        key: simple.key,
+        note: onLevel ? "Double V sur la zone. Sans ce W, le retour sur la zone ne se prend pas. Sortir au cou." : "Exploitation simple du W. Pas besoin qu'il soit sur une zone. Entr\xE9e au deuxi\xE8me creux, sortie au cou."
+      };
     }
     if (style.id === "swing") return confirmationSetup(r, true);
     return confirmationSetup(r);
