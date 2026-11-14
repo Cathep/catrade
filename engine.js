@@ -471,24 +471,28 @@ var CT = (() => {
     const typical = ranges.length ? ranges[ranges.length >> 1] : 0;
     if (!(typical > 0)) return null;
     let best = null;
-    let bestTouches = 0;
-    for (let i = lows.length - 1; i >= 1; i--) {
-      const b = lows[i];
-      const a = lows[i - 1];
-      if (b.i - a.i < 6 || n - 1 - b.i > 36) continue;
-      if (!(b.p > a.p)) continue;
-      const slope = (b.p - a.p) / (b.i - a.i);
-      if (!Number.isFinite(slope) || slope === 0) continue;
-      const at = (idx) => a.p + slope * (idx - a.i);
-      const touches = lows.filter((pt) => pt.i >= a.i && Math.abs(pt.p - at(pt.i)) <= typical * 1.25);
-      if (touches.length < 3 || touches.length < bestTouches) continue;
-      const priceTo = at(n - 1);
-      const last = k[n - 1].c;
-      if (last < priceTo) continue;
-      if (Math.abs(last - priceTo) > Math.max(typical * 3, Math.abs(b.p - a.p) * 0.45)) continue;
-      bestTouches = touches.length;
-      best = { from: a.i, price: a.p, touch: b.i, to: n - 1, priceTo, side: "l" };
-      break;
+    for (let j = lows.length - 1; j >= 1 && !best; j--) {
+      const b = lows[j];
+      if (n - 1 - b.i > 36) continue;
+      for (let i = j - 1; i >= Math.max(0, j - 3); i--) {
+        const a = lows[i];
+        if (b.i - a.i < 6 || b.i - a.i > 48) continue;
+        if (!(b.p > a.p)) continue;
+        const slope = (b.p - a.p) / (b.i - a.i);
+        if (!Number.isFinite(slope) || slope === 0) continue;
+        const at = (idx) => a.p + slope * (idx - a.i);
+        const touches = lows.filter((pt) => pt.i >= a.i && pt.i <= b.i && Math.abs(pt.p - at(pt.i)) <= typical * 0.8);
+        if (touches.length < 3) continue;
+        let through = 0;
+        for (let u = a.i + 1; u < b.i; u++) if (k[u].c < at(u)) through++;
+        if (through > (b.i - a.i) * 0.15) continue;
+        const priceTo = at(n - 1);
+        const last = k[n - 1].c;
+        if (last < priceTo) continue;
+        if (Math.abs(last - priceTo) > Math.max(typical * 3, Math.abs(b.p - a.p) * 0.45)) continue;
+        best = { from: a.i, price: a.p, touch: b.i, to: n - 1, priceTo, side: "l" };
+        break;
+      }
     }
     return best;
   }
@@ -658,7 +662,7 @@ var CT = (() => {
   }
   function confirmationSetup(r) {
     const zones = (r.zones ?? []).filter((z) => z.role === "directeur" && z.top > z.bottom);
-    const bar = r.candles?.length ? r.candles[r.candles.length - 1] : null;
+    const bar = r.series?.length ? r.series[r.series.length - 1] : r.candles?.length ? r.candles[r.candles.length - 1] : null;
     if (!bar || r.price == null || zones.length < 2) return null;
     const range = bar.h - bar.l;
     const body = Math.abs(bar.c - bar.o);
