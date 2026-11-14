@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "81";
+const BUILD = "82";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -644,6 +644,15 @@ function simulate(box) {
   box.querySelector("[data-sim=note]").textContent = note;
 }
 
+function senseOfReport(r) {
+  const src = r.series && r.series.length ? r.series : (r.candles || []);
+  let s = 0;
+  try { s = CT.senseOf(src); } catch (e) { s = 0; }
+  if (s > 0) return { cls: "up", text: "Haussière" };
+  if (s < 0) return { cls: "down", text: "Baissière" };
+  return { cls: "flat", text: "Pas de sens" };
+}
+
 function courseCard(r, plan, i) {
   const mk = MARKETS.find((m) => m.id === r.id);
   const spec = styleById(styleId);
@@ -668,8 +677,9 @@ function courseCard(r, plan, i) {
       <dl class="sim-r" data-sim="out"></dl>
       <p class="sim-n" data-sim="note"></p>
     </details>`;
+  const sens = senseOfReport(r);
   return `<article class="card glass rise" id="m-${esc(r.id)}" data-dir="${plan.dir}" data-choice="${ch ? ch.c : ""}" style="--i:${i}">
-    <div class="head"><div><p class="name">${esc(mk.name)}<span class="buf">${esc(spec.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div>
+    <div class="head"><div><p class="name">${esc(mk.name)}<span class="buf">${esc(spec.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div><p class="sense ${sens.cls}">${sens.text}</p></div>
       <div class="ring" style="--p:65;--ringc:var(--color-buy)"><b>TP<small>${plan.kind === "ZONE" ? "zone d'après" : "le cou"}</small></b></div>
     </div>
     <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="kind" data-k="${esc(plan.kind)}">${plan.kind === "ZONE" ? "Zone" : esc(plan.kind)}</span><span class="subcall">${esc(plan.note)}</span></div>
@@ -714,8 +724,9 @@ function zoneCard(r, i) {
   const mk = MARKETS.find((m) => m.id === r.id);
   const spec = styleById(styleId);
   const wait = reactionText(r, spec.tf);
+  const sens = senseOfReport(r);
   return `<article class="card glass" id="m-${esc(r.id)}" style="--i:${i}">
-    <div class="head"><div><p class="name">${esc(mk.name)}<span class="buf">${esc(spec.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div></div>
+    <div class="head"><div><p class="name">${esc(mk.name)}<span class="buf">${esc(spec.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div><p class="sense ${sens.cls}">${sens.text}</p></div></div>
     <p class="subcall">${esc(wait || r.reason || "Pas de W mûr.")}</p>
     ${chart(r, null)}
     <p class="legend"><span><i class="zn entz"></i>entrée</span><span><i class="zn dirz"></i>niveau</span><span><i class="dot faux"></i>faux</span><span><i class="ln tpn"></i>TP</span></p>
@@ -735,7 +746,8 @@ function render(fresh) {
   if (othersTitle) othersTitle.textContent = rest.length ? `Les autres · ${rest.length}` : "Les autres";
   $("#others").innerHTML = rest.length ? rest.map((r) => {
     const mk = MARKETS.find((m) => m.id === r.id);
-    return `<li><b>${esc(mk.name)}</b><b>${r.price != null ? fmt(r.price, mk.dp) : "?"}</b><span>${esc(r.reason)}</span></li>`;
+    const sens = senseOfReport(r);
+    return `<li><b>${esc(mk.name)}</b><b>${r.price != null ? fmt(r.price, mk.dp) : "?"}</b><span class="sense ${sens.cls}">${sens.text}</span></li>`;
   }).join("") : `<li><span>${reports.length ? "Tous les marchés lus ont un setup mûr." : "Pas encore de lecture."}</span></li>`;
   const order = new Map(MARKETS.map((m, i) => [m.id, i]));
   const listed = reports.slice().sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
