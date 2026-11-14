@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "69";
+const BUILD = "70";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -628,7 +628,7 @@ function courseCard(r, plan, i) {
       : `<div class="choice"><button class="btn go" type="button" data-take="${esc(r.id)}">Je prends</button><button class="btn" type="button" data-skip="${esc(r.id)}">Je passe</button></div>`;
   return `<article class="card glass rise" id="m-${esc(r.id)}" data-dir="${plan.dir}" data-choice="${ch ? ch.c : ""}" style="--i:${i}">
     <div class="head"><div><p class="name">${esc(mk.name)}<span class="buf">${esc(spec.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div>
-      <div class="ring" style="--p:65;--ringc:var(--color-buy)"><b>TP<small>le cou</small></b></div>
+      <div class="ring" style="--p:65;--ringc:var(--color-buy)"><b>TP<small>${plan.kind === "ZONE" ? "zone d'après" : "le cou"}</small></b></div>
     </div>
     <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="kind" data-k="${esc(plan.kind)}">${plan.kind === "ZONE" ? "Zone" : esc(plan.kind)}</span><span class="subcall">${esc(plan.note)}</span></div>
     ${chart(r, plan)}
@@ -637,7 +637,7 @@ function courseCard(r, plan, i) {
     <dl class="lv">
       <div><dt>Entrée</dt><dd>${fmt(plan.ref, mk.dp)}</dd></div>
       <div><dt>SL</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${esc(distText(mk, plan.dist))}</span></div>
-      <div><dt>TP</dt><dd class="tp">${fmt(plan.tp, mk.dp)}</dd><span>le cou</span></div>
+      <div><dt>TP</dt><dd class="tp">${fmt(plan.tp, mk.dp)}</dd><span>${plan.kind === "ZONE" ? "zone d'après" : "le cou"}</span></div>
     </dl>
     <p class="stack">${plan.kind === "ZONE" ? "Stop de l'autre côté de la zone. Sortie sur la zone d'après." : "On tient jusqu'au cou, sans rapprocher le stop."} ${esc(spec.stack)}</p>
     ${actions}

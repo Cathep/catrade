@@ -614,32 +614,72 @@ var CT = (() => {
     }
     return null;
   }
+  function confirmationSetup(r) {
+    const zones = (r.zones ?? []).filter((z) => z.role === "directeur" && z.top > z.bottom);
+    const bar = r.candles?.length ? r.candles[r.candles.length - 1] : null;
+    if (!bar || r.price == null || zones.length < 2) return null;
+    const range = bar.h - bar.l;
+    const body = Math.abs(bar.c - bar.o);
+    if (!(range > 0) || body < range * 0.55) return null;
+    const bull = bar.c > bar.o;
+    const touched = zones.filter((z) => bar.l <= z.top && bar.h >= z.bottom);
+    const zone = bull ? touched.filter((z) => bar.c >= z.top).sort((a, b) => b.top - a.top)[0] : touched.filter((z) => bar.c <= z.bottom).sort((a, b) => a.bottom - b.bottom)[0];
+    if (!zone) return null;
+    const dir = bull ? 1 : -1;
+    const next = zones.filter((z) => z !== zone && (dir > 0 ? z.bottom > zone.top : z.top < zone.bottom)).sort((a, b) => dir > 0 ? a.bottom - b.bottom : b.top - a.top)[0];
+    if (!next) return null;
+    const pad = (r.atr || range) * 0.12;
+    const sl = dir > 0 ? Math.min(bar.l, zone.bottom) - pad : Math.max(bar.h, zone.top) + pad;
+    const tp = dir > 0 ? next.bottom : next.top;
+    const price = r.price;
+    if (dir > 0 ? !(price > sl && price < tp) : !(price < sl && price > tp)) return null;
+    const dist = Math.abs(price - sl);
+    const reward = Math.abs(tp - price);
+    if (!(reward > dist)) return null;
+    return {
+      kind: "ZONE",
+      dir,
+      ref: price,
+      sl,
+      dist,
+      tp,
+      objective: tp,
+      reward,
+      step: 1,
+      key: `c:${bar.t}:${zone.bottom.toFixed(4)}:${dir}`,
+      note: "Bougie d\xE9termin\xE9e sur la zone. Le simple retour ne se prend pas. TP sur la zone d'apr\xE8s."
+    };
+  }
   function coursePlan(r, style) {
     if (r.price == null || r.state === "agite" || r.state === "ferme" || r.state === "erreur") return null;
     if (r.reasonCode === "LOCAL_AGAINST_CONTEXT") return null;
     const simple = wSetup(r);
     const pattern = r.pattern;
-    if (!simple || !pattern || style.id === "swing") return null;
-    const extreme = pattern.dir > 0 ? Math.min(pattern.ext1, pattern.ext2) : Math.max(pattern.ext1, pattern.ext2);
-    const onLevel = (r.zones ?? []).some((z) => {
-      if (z.role !== "directeur" || !(z.top > z.bottom)) return false;
-      const h = z.top - z.bottom;
-      return extreme >= z.bottom - h && extreme <= z.top + h;
-    });
-    if (!onLevel) return null;
-    return {
-      kind: "W",
-      dir: simple.dir,
-      ref: simple.ref,
-      sl: simple.sl,
-      dist: simple.dist,
-      tp: simple.neck,
-      objective: simple.neck,
-      reward: Math.abs(simple.neck - simple.ref),
-      step: 0,
-      key: simple.key,
-      note: "Double V sur la zone. Sans ce W, le retour sur la zone ne se prend pas. Sortir au cou."
-    };
+    if (simple && pattern && style.id !== "swing") {
+      const extreme = pattern.dir > 0 ? Math.min(pattern.ext1, pattern.ext2) : Math.max(pattern.ext1, pattern.ext2);
+      const onLevel = (r.zones ?? []).some((z) => {
+        if (z.role !== "directeur" || !(z.top > z.bottom)) return false;
+        const h = z.top - z.bottom;
+        return extreme >= z.bottom - h && extreme <= z.top + h;
+      });
+      if (onLevel) {
+        return {
+          kind: "W",
+          dir: simple.dir,
+          ref: simple.ref,
+          sl: simple.sl,
+          dist: simple.dist,
+          tp: simple.neck,
+          objective: simple.neck,
+          reward: Math.abs(simple.neck - simple.ref),
+          step: 0,
+          key: simple.key,
+          note: "Double V sur la zone. Sans ce W, le retour sur la zone ne se prend pas. Sortir au cou."
+        };
+      }
+    }
+    if (style.id === "swing") return null;
+    return confirmationSetup(r);
   }
   function gestionAt(plan, q) {
     return plan.ref + (plan.tp - plan.ref) * q;
