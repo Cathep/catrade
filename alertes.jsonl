@@ -65,3 +65,4 @@
 {"id":"suivi:ZONE:BOOM600:scalping:c:1794660300:5153.8993:1:time","time":1794668192,"title":"60 % Boom 600 Index","message":"60 % du chemin. Passe le stop en profit, vers 5175.20092."}
 {"id":"suivi:ZONE:CRASH100:day:c:1794654000:94599.6709:-1:time","time":1794669366,"title":"60 % Crash 100 Index","message":"60 % du chemin. Passe le stop en profit, vers 94519.3024."}
 {"id":"suivi:ZONE:BOOM600:scalping:c:1794660300:5153.8993:1:early","time":1794669367,"title":"80 % Boom 600 Index","message":"80 % du chemin. Tu peux fermer, sans attendre le prix exact."}
+{"id":"suivi:ZONE:CRASH100:day:c:1794654000:94599.6709:-1:time","time":1794669942,"title":"40 % Crash 100 Index","message":"40 % du chemin. Ramène le stop à l'entrée."}
