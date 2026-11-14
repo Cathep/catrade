@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "79";
+const BUILD = "80";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -679,6 +679,7 @@ function courseCard(r, plan, i) {
       <div><dt>TP</dt><dd class="tp">${fmt(plan.tp, mk.dp)}</dd><span>${plan.kind === "ZONE" ? "zone d'après" : "le cou"}</span></div>
     </dl>
     <p class="stack">${plan.kind === "ZONE" ? "SL de l'autre côté de la zone. TP sur la zone d'après." : "On tient jusqu'au cou, sans rapprocher le SL."} ${esc(spec.stack)}</p>
+    ${gestion(plan, mk).map((t) => `<p class="stack">${esc(t)}</p>`).join("")}
     ${sim}
     ${actions}
   </article>`;
