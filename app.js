@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "80";
+const BUILD = "81";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -386,7 +386,10 @@ function chartInner(r, plan) {
   if (real.length < 2 || r.price == null) return "";
   const traced = zonesForView(r, start, view);
   const live = start + view >= sourceOf(r).length - 8;
-  const read = CT.readAfter((sourceOf(r).slice(Math.max(0, start), start + view)), traced, r.dir || 0);
+  const slice = sourceOf(r).slice(Math.max(0, start), start + view);
+  let sense = 0;
+  try { sense = CT.senseOf(slice); } catch (e) { sense = 0; }
+  const read = CT.readAfter(slice, traced, sense);
   const zones = traced.filter((z) => z.role === "directeur").concat(read.standard ? [read.standard] : []).concat(live && plan && plan.kind === "W" ? (r.zones || []).filter((z) => z.role === "entree") : []);
   const W = 300, H = 128;
   const hi = Math.max(...real.map((b) => b.h));

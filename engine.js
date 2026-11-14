@@ -37,6 +37,7 @@ var CT = (() => {
     proposeLevels: () => proposeLevels,
     readAfter: () => readAfter,
     replayCourse: () => replayCourse,
+    senseOf: () => senseOf,
     simulateTrade: () => simulateTrade,
     styleById: () => styleById,
     traceZones: () => traceZones,
@@ -661,6 +662,41 @@ var CT = (() => {
     }
     return null;
   }
+  function senseOf(k) {
+    const wing = 4;
+    if (k.length < wing * 6) return 0;
+    const highs = [];
+    const lows = [];
+    const from = Math.max(wing, k.length - 80);
+    for (let i = from; i <= k.length - 1 - wing; i++) {
+      let hi = true;
+      let lo = true;
+      for (let j = i - wing; j <= i + wing; j++) {
+        if (j === i) continue;
+        if (k[j].h >= k[i].h) hi = false;
+        if (k[j].l <= k[i].l) lo = false;
+      }
+      if (hi) highs.push({ i, p: k[i].h });
+      if (lo) lows.push({ i, p: k[i].l });
+    }
+    if (highs.length < 2 || lows.length < 2) return 0;
+    const h1 = highs[highs.length - 2];
+    const h2 = highs[highs.length - 1];
+    const l1 = lows[lows.length - 2];
+    const l2 = lows[lows.length - 1];
+    const structure = h2.p > h1.p && l2.p > l1.p ? 1 : h2.p < h1.p && l2.p < l1.p ? -1 : 0;
+    if (!structure) return 0;
+    const swings = [...highs.map((s) => ({ ...s, d: 1 })), ...lows.map((s) => ({ ...s, d: -1 }))].sort((a2, b2) => a2.i - b2.i);
+    if (swings.length < 3) return 0;
+    const a = swings[swings.length - 3];
+    const b = swings[swings.length - 2];
+    const c = swings[swings.length - 1];
+    const first = b.p - a.p;
+    const second = c.p - b.p;
+    if (!(Math.abs(first) > 0) || !(Math.abs(second) > 0)) return 0;
+    const impulse = Math.abs(second) >= Math.abs(first) ? second > 0 ? 1 : -1 : first > 0 ? 1 : -1;
+    return impulse === structure ? structure : 0;
+  }
   function readAfter(k, zones, dir) {
     const majors = zones.filter((z) => z.role === "directeur" && z.top > z.bottom);
     const marks = [];
@@ -688,14 +724,15 @@ var CT = (() => {
   }
   function confirmationSetup(r) {
     const k = r.series?.length ? r.series : r.candles ?? [];
-    const read = readAfter(k, r.zones ?? [], r.dir);
+    const dir = senseOf(k);
+    const read = readAfter(k, r.zones ?? [], dir);
     const zone = read.standard;
     const bar = k.length ? k[k.length - 1] : null;
     if (!bar || !zone || r.price == null) return null;
     const range = bar.h - bar.l;
     const body = Math.abs(bar.c - bar.o);
     if (!(range > 0) || body < range * 0.55) return null;
-    const dir = r.dir > 0 ? 1 : -1;
+    if (dir !== 1 && dir !== -1) return null;
     const next = (r.zones ?? []).filter((z) => z.role === "directeur" && z !== zone && (dir > 0 ? z.bottom > zone.top : z.top < zone.bottom)).sort((a, b) => dir > 0 ? a.bottom - b.bottom : b.top - a.top)[0];
     if (!next) return null;
     const pad = (r.atr || range) * 0.12;
@@ -717,7 +754,7 @@ var CT = (() => {
       reward,
       step: 1,
       key: `c:${bar.t}:${zone.bottom.toFixed(4)}:${dir}`,
-      note: "Rejet sur le niveau d'entr\xE9e, dans le sens du mouvement. Pas de faux d\xE9bordement."
+      note: "Hausse et baisse ne se devinent pas sur la zone. Les deux r\xE8gles sont d'accord, puis le prix rejette le niveau."
     };
   }
   function coursePlan(r, style) {
