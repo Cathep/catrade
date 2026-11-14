@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "70";
+const BUILD = "71";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -591,11 +591,27 @@ function card(r, i) {
 function simulate(box) {
   const id = box.dataset.id;
   const r = reports.find((x) => x.id === id);
-  const plan = planOf(r);
-  if (!plan) return;
+  if (!r) return;
   const mk = MARKETS.find((m) => m.id === id);
   const spec = specOf(mk);
   const lots = lotFor(mk);
+  const course = typeof CT.coursePlan === "function" ? CT.coursePlan(r, styleById(styleId)) : null;
+  const metal = mk.cls === "gold" || /^frxX(AU|AG|PD|PT)/.test(mk.id);
+  const unit = metal
+    ? `1,00 $ de cours = ${num(spec.contract, 0)} $ pour 1 lot`
+    : mk.cls === "fx"
+      ? `1 lot = ${spec.contract.toLocaleString("fr-FR")} ${spec.ccy}`
+      : `1 lot = ${spec.contract} ${spec.ccy === "USD" ? "$" : spec.ccy} par point`;
+  const note = `Lot minimum Deriv ${num(spec.min, lotDigits(spec.min))}. ${unit}. Rien n'est envoyé au courtier.`;
+  if (course && r.price != null) {
+    const loss = moneyFor(mk, r.price, course.dist, lots);
+    const gain = moneyFor(mk, r.price, course.reward, lots);
+    box.querySelector("[data-sim=out]").innerHTML = `<div><dt>TP</dt><dd class="g">${moneyText(gain.v, gain.ccy)}</dd></div><div><dt>SL</dt><dd class="l">${moneyText(-loss.v, loss.ccy)}</dd></div>`;
+    box.querySelector("[data-sim=note]").textContent = note;
+    return;
+  }
+  const plan = planOf(r);
+  if (!plan) return;
   const price = r.price ?? plan.entry;
   const loss = moneyFor(mk, price, plan.dist, lots);
   const gains = plan.tps.map((t, i) => {
@@ -603,14 +619,8 @@ function simulate(box) {
     return `<div><dt>${esc(tpTitle(t, i, plan.tps.length))}</dt><dd class="g">${moneyText(g.v, g.ccy)}</dd></div>`;
   }).join("");
   const avg = r.record.n ? r.record.avg * loss.v : 0;
-  box.querySelector("[data-sim=out]").innerHTML = `${gains}<div><dt>SL touché</dt><dd class="l">${moneyText(-loss.v, loss.ccy)}</dd></div><div><dt>En moyenne</dt><dd>${r.record.n ? moneyText(avg, loss.ccy) : "—"}</dd></div>`;
-  const metal = mk.cls === "gold" || /^frxX(AU|AG|PD|PT)/.test(mk.id);
-  const unit = metal
-    ? `1,00 $ de cours = ${num(spec.contract, 0)} $ pour 1 lot`
-    : mk.cls === "fx"
-      ? `1 lot = ${spec.contract.toLocaleString("fr-FR")} ${spec.ccy}`
-      : `1 lot = ${spec.contract} ${spec.ccy === "USD" ? "$" : spec.ccy} par point`;
-  box.querySelector("[data-sim=note]").textContent = `Lot minimum Deriv ${num(spec.min, lotDigits(spec.min))}. ${unit}.`;
+  box.querySelector("[data-sim=out]").innerHTML = `${gains}<div><dt>SL</dt><dd class="l">${moneyText(-loss.v, loss.ccy)}</dd></div><div><dt>En moyenne</dt><dd>${r.record.n ? moneyText(avg, loss.ccy) : "—"}</dd></div>`;
+  box.querySelector("[data-sim=note]").textContent = note;
 }
 
 function courseCard(r, plan, i) {
@@ -626,6 +636,17 @@ function courseCard(r, plan, i) {
     : ch && ch.c === "passe"
       ? `<p class="taken">Tu as passé ce cas.</p><div class="choice"><button class="btn" type="button" data-undo="${esc(r.id)}">Revoir</button></div>`
       : `<div class="choice"><button class="btn go" type="button" data-take="${esc(r.id)}">Je prends</button><button class="btn" type="button" data-skip="${esc(r.id)}">Je passe</button></div>`;
+  const lotSpec = specOf(mk);
+  const choices = lotChoices(lotSpec);
+  const used = lotFor(mk);
+  const sim = `<details class="sim" data-id="${esc(r.id)}"><summary>Simuler un lot</summary>
+      <div class="lots" role="group" aria-label="Lot">
+        ${choices.map((v) => `<button type="button" class="${Math.abs(used - v) < 1e-9 ? "on" : ""}" data-lot="${v}">${num(v, lotDigits(lotSpec.min))}</button>`).join("")}
+      </div>
+      <label class="lot-in">Lot, minimum ${num(lotSpec.min, lotDigits(lotSpec.min))}<input type="number" inputmode="decimal" min="${lotSpec.min}" step="${lotSpec.min < 0.01 ? 0.001 : 0.01}" value="${used}" data-sim="lot"></label>
+      <dl class="sim-r" data-sim="out"></dl>
+      <p class="sim-n" data-sim="note"></p>
+    </details>`;
   return `<article class="card glass rise" id="m-${esc(r.id)}" data-dir="${plan.dir}" data-choice="${ch ? ch.c : ""}" style="--i:${i}">
     <div class="head"><div><p class="name">${esc(mk.name)}<span class="buf">${esc(spec.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div>
       <div class="ring" style="--p:65;--ringc:var(--color-buy)"><b>TP<small>${plan.kind === "ZONE" ? "zone d'après" : "le cou"}</small></b></div>
@@ -639,7 +660,8 @@ function courseCard(r, plan, i) {
       <div><dt>SL</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${esc(distText(mk, plan.dist))}</span></div>
       <div><dt>TP</dt><dd class="tp">${fmt(plan.tp, mk.dp)}</dd><span>${plan.kind === "ZONE" ? "zone d'après" : "le cou"}</span></div>
     </dl>
-    <p class="stack">${plan.kind === "ZONE" ? "Stop de l'autre côté de la zone. Sortie sur la zone d'après." : "On tient jusqu'au cou, sans rapprocher le stop."} ${esc(spec.stack)}</p>
+    <p class="stack">${plan.kind === "ZONE" ? "SL de l'autre côté de la zone. TP sur la zone d'après." : "On tient jusqu'au cou, sans rapprocher le SL."} ${esc(spec.stack)}</p>
+    ${sim}
     ${actions}
   </article>`;
 }
