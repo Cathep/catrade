@@ -660,9 +660,16 @@ var CT = (() => {
     }
     return null;
   }
+  function stopHasRoom(r, dist, reward) {
+    if (!(dist > 0) || !(reward > dist) || reward > dist * 4) return false;
+    const bars = (r.series?.length ? r.series : r.candles) ?? [];
+    const ranges = bars.slice(-40).map((b) => b.h - b.l).filter((x) => x > 0).sort((a, b) => a - b);
+    if (ranges.length < 8) return true;
+    return dist >= ranges[ranges.length >> 1];
+  }
   function confirmationSetup(r) {
     const zones = (r.zones ?? []).filter((z) => z.role === "directeur" && z.top > z.bottom);
-    const bar = r.candles?.length ? r.candles[r.candles.length - 1] : null;
+    const bar = r.series?.length ? r.series[r.series.length - 1] : r.candles?.length ? r.candles[r.candles.length - 1] : null;
     if (!bar || r.price == null || zones.length < 2) return null;
     const range = bar.h - bar.l;
     const body = Math.abs(bar.c - bar.o);
@@ -681,7 +688,7 @@ var CT = (() => {
     if (dir > 0 ? !(price > sl && price < tp) : !(price < sl && price > tp)) return null;
     const dist = Math.abs(price - sl);
     const reward = Math.abs(tp - price);
-    if (!(reward > dist)) return null;
+    if (!stopHasRoom(r, dist, reward)) return null;
     return {
       kind: "ZONE",
       dir,
