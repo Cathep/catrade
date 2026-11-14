@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "73";
+const BUILD = "74";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -685,7 +685,7 @@ function courseCard(r, plan, i) {
     </div>
     <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="kind" data-k="${esc(plan.kind)}">${plan.kind === "ZONE" ? "Zone" : esc(plan.kind)}</span><span class="subcall">${esc(plan.note)}</span></div>
     ${chart(r, plan)}
-    <p class="legend"><span><i class="zn entz"></i>zone du W</span><span><i class="zn dirz"></i>niveau</span><span><i class="ln obl"></i>oblique</span><span><i class="ln ent"></i>entrée</span><span><i class="ln sln"></i>SL</span><span><i class="ln tpn"></i>TP</span></p>
+    <p class="legend"><span><i class="zn entz"></i>zone du W</span><span><i class="zn dirz"></i>niveau</span><span><i class="ln obl"></i>support oblique</span><span><i class="ln ent"></i>entrée</span><span><i class="ln sln"></i>SL</span><span><i class="ln tpn"></i>TP</span></p>
     <div class="rail" aria-hidden="true"><i style="width:${pct}%"></i></div>
     <dl class="lv">
       <div><dt>Entrée</dt><dd>${fmt(plan.ref, mk.dp)}</dd></div>
@@ -728,7 +728,7 @@ function zoneCard(r, i) {
     <div class="head"><div><p class="name">${esc(mk.name)}<span class="buf">${esc(spec.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div></div>
     <p class="subcall">${esc(wait || r.reason || "Pas de W mûr.")}</p>
     ${chart(r, null)}
-    <p class="legend"><span><i class="zn entz"></i>zone du W</span><span><i class="zn dirz"></i>niveau</span><span><i class="ln obl"></i>oblique</span><span><i class="ln tpn"></i>TP</span></p>
+    <p class="legend"><span><i class="zn entz"></i>zone du W</span><span><i class="zn dirz"></i>niveau</span><span><i class="ln obl"></i>support oblique</span><span><i class="ln tpn"></i>TP</span></p>
   </article>`;
 }
 
