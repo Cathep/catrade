@@ -468,11 +468,15 @@ var CT = (() => {
       if (hi) highs.push({ i, p: k[i].h });
       if (lo) lows.push({ i, p: k[i].l });
     }
+    const ranges = [];
+    for (let i = Math.max(0, n - 40); i < n; i++) ranges.push(k[i].h - k[i].l);
+    ranges.sort((a, b) => a - b);
+    const typical = ranges.length ? ranges[ranges.length >> 1] : 0;
     const pair = (pts, rising) => {
       for (let i = pts.length - 1; i >= 1; i--) {
         const a = pts[i - 1];
         const b = pts[i];
-        if (b.i - a.i < 6) continue;
+        if (b.i - a.i < 6 || n - 1 - b.i > 36) continue;
         if (rising ? b.p > a.p : b.p < a.p) return { a, b };
       }
       return null;
@@ -481,21 +485,17 @@ var CT = (() => {
       if (!seg) return null;
       const slope = (seg.b.p - seg.a.p) / (seg.b.i - seg.a.i);
       if (!Number.isFinite(slope) || slope === 0) return null;
-      return { from: seg.a.i, price: seg.a.p, to: n - 1, priceTo: seg.b.p + slope * (n - 1 - seg.b.i), side };
+      const priceTo = seg.b.p + slope * (n - 1 - seg.b.i);
+      const last = k[n - 1].c;
+      const near = Math.abs(last - priceTo) <= Math.max(typical * 3, Math.abs(seg.b.p - seg.a.p) * 0.45);
+      const held = side === "l" ? last >= priceTo : last <= priceTo;
+      if (!near || !held) return null;
+      return { from: seg.a.i, price: seg.a.p, touch: seg.b.i, to: n - 1, priceTo, side };
     };
     const support = build(pair(lows, true), "l");
     const resist = build(pair(highs, false), "h");
-    const last = k[n - 1].c;
-    const alive = (line) => {
-      if (!line) return false;
-      return line.side === "l" ? last >= line.priceTo : last <= line.priceTo;
-    };
-    if (alive(support) && alive(resist)) {
-      return Math.abs(last - support.priceTo) <= Math.abs(last - resist.priceTo) ? support : resist;
-    }
-    if (alive(support)) return support;
-    if (alive(resist)) return resist;
-    return null;
+    if (support && resist) return null;
+    return support || resist;
   }
   function ahead(dir, entry, px, gap) {
     return dir > 0 ? px > entry + gap : px < entry - gap;

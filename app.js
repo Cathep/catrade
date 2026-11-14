@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "72";
+const BUILD = "73";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -348,7 +348,7 @@ function obliqueForView(r, start, view) {
   let line = null;
   try { line = CT.obliqueOn(slice); } catch (e) { line = null; }
   if (!line) return null;
-  return { ...line, from: line.from + from, to: line.to + from };
+  return { ...line, from: line.from + from, touch: line.touch + from, to: line.to + from };
 }
 
 function zonesForView(r, start, view) {
@@ -406,21 +406,23 @@ function chartInner(r, plan) {
     return `<rect x="${left}" y="${yy}" width="${Math.max(1, W - left)}" height="${h}" fill="${color}" fill-opacity="0.22" stroke="${color}" stroke-opacity="0.85" stroke-width="1"/>`;
   }).join("");
   let obliqueSvg = "";
-  if (oblique && oblique.to !== oblique.from) {
+  if (oblique && oblique.touch != null && oblique.touch !== oblique.from) {
     const slope = (oblique.priceTo - oblique.price) / (oblique.to - oblique.from);
-    const i1 = oblique.from - start;
-    const i2 = view - 1;
-    const p1 = oblique.price + slope * ((start + i1) - oblique.from);
-    const p2 = oblique.price + slope * ((start + i2) - oblique.from);
-    const clip = (ia, pa, ib, pb) => {
-      let a = { i: ia, p: pa };
-      let b = { i: ib, p: pb };
-      const ya = y(a.p);
-      const yb = y(b.p);
-      if (!Number.isFinite(ya) || !Number.isFinite(yb)) return "";
-      return `<line x1="${x(a.i)}" y1="${ya}" x2="${x(b.i)}" y2="${yb}" stroke="var(--color-focus)" stroke-width="1.4" stroke-linecap="round"/>`;
-    };
-    if (i1 < view) obliqueSvg = clip(Math.max(0, i1), i1 < 0 ? oblique.price + slope * (start - oblique.from) : p1, i2, p2);
+    const iStart = oblique.from - start;
+    const iTouch = oblique.touch - start;
+    let end = 0;
+    for (let i = 0; i < bars.length; i++) if (bars[i]) end = i;
+    const begin = iStart >= 0 ? iStart : iTouch;
+    const finish = Math.min(view - 1, Math.max(end, iTouch) + 6);
+    if (begin >= 0 && begin < finish) {
+      const p1 = oblique.price + slope * (begin + start - oblique.from);
+      const p2 = oblique.price + slope * (finish + start - oblique.from);
+      const y1 = y(p1);
+      const y2 = y(p2);
+      if (Number.isFinite(y1) && Number.isFinite(y2)) {
+        obliqueSvg = `<line x1="${x(begin)}" y1="${y1}" x2="${x(finish)}" y2="${y2}" stroke="var(--color-focus)" stroke-width="1.4" stroke-linecap="round"/>`;
+      }
+    }
   }
   const bodyW = Math.max(2.2, slot * 0.62);
   const bodies = bars.map((b, i) => {
