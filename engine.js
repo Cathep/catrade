@@ -662,7 +662,7 @@ var CT = (() => {
   }
   function confirmationSetup(r) {
     const zones = (r.zones ?? []).filter((z) => z.role === "directeur" && z.top > z.bottom);
-    const bar = r.series?.length ? r.series[r.series.length - 1] : r.candles?.length ? r.candles[r.candles.length - 1] : null;
+    const bar = r.candles?.length ? r.candles[r.candles.length - 1] : null;
     if (!bar || r.price == null || zones.length < 2) return null;
     const range = bar.h - bar.l;
     const body = Math.abs(bar.c - bar.o);

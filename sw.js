@@ -1,5 +1,5 @@
-const CACHE = "catrade-v58";
-const SHELL = ["./index.html", "./style.css?v=29", "./app.js?v=75", "./engine.js?v=75", "./favicon.svg", "./icon-180.png", "./manifest.webmanifest"];
+const CACHE = "catrade-v59";
+const SHELL = ["./index.html", "./style.css?v=29", "./app.js?v=76", "./engine.js?v=76", "./favicon.svg", "./icon-180.png", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
