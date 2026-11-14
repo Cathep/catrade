@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "68";
+const BUILD = "69";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -628,16 +628,16 @@ function courseCard(r, plan, i) {
       : `<div class="choice"><button class="btn go" type="button" data-take="${esc(r.id)}">Je prends</button><button class="btn" type="button" data-skip="${esc(r.id)}">Je passe</button></div>`;
   return `<article class="card glass rise" id="m-${esc(r.id)}" data-dir="${plan.dir}" data-choice="${ch ? ch.c : ""}" style="--i:${i}">
     <div class="head"><div><p class="name">${esc(mk.name)}<span class="buf">${esc(spec.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div>
-      <div class="ring" style="--p:65;--ringc:var(--color-buy)"><b>cou<small>la sortie</small></b></div>
+      <div class="ring" style="--p:65;--ringc:var(--color-buy)"><b>TP<small>le cou</small></b></div>
     </div>
     <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="kind" data-k="${esc(plan.kind)}">${plan.kind === "ZONE" ? "Zone" : esc(plan.kind)}</span><span class="subcall">${esc(plan.note)}</span></div>
     ${chart(r, plan)}
-    <p class="legend"><span><i class="zn entz"></i>zone du W</span><span><i class="zn dirz"></i>niveau</span><span><i class="ln ent"></i>entrée</span><span><i class="ln sln"></i>stop</span><span><i class="ln tpn"></i>cou</span></p>
+    <p class="legend"><span><i class="zn entz"></i>zone du W</span><span><i class="zn dirz"></i>niveau</span><span><i class="ln ent"></i>entrée</span><span><i class="ln sln"></i>SL</span><span><i class="ln tpn"></i>TP</span></p>
     <div class="rail" aria-hidden="true"><i style="width:${pct}%"></i></div>
     <dl class="lv">
       <div><dt>Entrée</dt><dd>${fmt(plan.ref, mk.dp)}</dd></div>
-      <div><dt>Stop</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${esc(distText(mk, plan.dist))}</span></div>
-      <div><dt>Sortie</dt><dd class="tp">${fmt(plan.tp, mk.dp)}</dd><span>le cou</span></div>
+      <div><dt>SL</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${esc(distText(mk, plan.dist))}</span></div>
+      <div><dt>TP</dt><dd class="tp">${fmt(plan.tp, mk.dp)}</dd><span>le cou</span></div>
     </dl>
     <p class="stack">${plan.kind === "ZONE" ? "Stop de l'autre côté de la zone. Sortie sur la zone d'après." : "On tient jusqu'au cou, sans rapprocher le stop."} ${esc(spec.stack)}</p>
     ${actions}
@@ -674,7 +674,7 @@ function zoneCard(r, i) {
     <div class="head"><div><p class="name">${esc(mk.name)}<span class="buf">${esc(spec.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div></div>
     <p class="subcall">${esc(wait || r.reason || "Pas de W mûr.")}</p>
     ${chart(r, null)}
-    <p class="legend"><span><i class="zn entz"></i>zone du W</span><span><i class="zn dirz"></i>niveau</span><span><i class="ln tpn"></i>cou</span></p>
+    <p class="legend"><span><i class="zn entz"></i>zone du W</span><span><i class="zn dirz"></i>niveau</span><span><i class="ln tpn"></i>TP</span></p>
   </article>`;
 }
 
@@ -942,7 +942,7 @@ async function alertLive() {
       sens, plan.kind, pct, `${spec.label} ${spec.tf}`, spec.stack,
       `Entrée ${fmt(plan.ref, mk.dp)}`,
       `SL ${fmt(plan.sl, mk.dp)}`,
-      `Sortie ${fmt(plan.tp, mk.dp)}`,
+      `TP ${fmt(plan.tp, mk.dp)}`,
       plan.note,
       `SUIVI ${r.id} ${styleId} ${plan.dir} ${plan.ref} ${plan.sl} ${plan.tp} ${key}`,
       "On tient jusqu'au cou. On ne rapproche pas le stop avant.",
