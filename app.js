@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "76";
+const BUILD = "77";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -385,7 +385,6 @@ function chartInner(r, plan) {
   const real = bars.filter(Boolean);
   if (real.length < 2 || r.price == null) return "";
   const traced = zonesForView(r, start, view);
-  const oblique = obliqueForView(r, start, view);
   const live = start + view >= sourceOf(r).length - 8;
   const zones = traced.filter((z) => z.role === "directeur").concat(live && plan && plan.kind === "W" ? (r.zones || []).filter((z) => z.role === "entree") : []);
   const W = 300, H = 128;
@@ -405,25 +404,6 @@ function chartInner(r, plan) {
     const color = z.role === "entree" ? "var(--color-focus)" : "var(--color-sell)";
     return `<rect x="${left}" y="${yy}" width="${Math.max(1, W - left)}" height="${h}" fill="${color}" fill-opacity="0.22" stroke="${color}" stroke-opacity="0.85" stroke-width="1"/>`;
   }).join("");
-  let obliqueSvg = "";
-  if (oblique && oblique.touch != null && oblique.touch !== oblique.from) {
-    const slope = (oblique.priceTo - oblique.price) / (oblique.to - oblique.from);
-    const iStart = oblique.from - start;
-    const iTouch = oblique.touch - start;
-    let end = 0;
-    for (let i = 0; i < bars.length; i++) if (bars[i]) end = i;
-    const begin = iStart >= 0 ? iStart : iTouch;
-    const finish = Math.min(view - 1, Math.max(end, iTouch) + 6);
-    if (begin >= 0 && begin < finish) {
-      const p1 = oblique.price + slope * (begin + start - oblique.from);
-      const p2 = oblique.price + slope * (finish + start - oblique.from);
-      const y1 = y(p1);
-      const y2 = y(p2);
-      if (Number.isFinite(y1) && Number.isFinite(y2)) {
-        obliqueSvg = `<line x1="${x(begin)}" y1="${y1}" x2="${x(finish)}" y2="${y2}" stroke="var(--color-focus)" stroke-width="1.4" stroke-linecap="round"/>`;
-      }
-    }
-  }
   const bodyW = Math.max(2.2, slot * 0.62);
   const bodies = bars.map((b, i) => {
     if (!b) return "";
@@ -443,7 +423,7 @@ function chartInner(r, plan) {
     guides = line(plan.ref, "var(--color-warn)", "2 3") + line(plan.sl, "var(--color-sell)", "1 3") + line(plan.tp, "var(--color-buy)", "4 3");
     if (plan.kind !== "W" && Math.abs(plan.objective - plan.tp) > plan.dist * 0.02) guides += line(plan.objective, "var(--color-focus)", "1 4");
   }
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Tire vers la gauche pour ouvrir l'espace à droite.">${bands}${bodies}${obliqueSvg}${guides}</svg><div class="chart-foot"><p class="panhint">Tire vers la gauche : l'espace vide s'ouvre à droite.</p><div class="chart-tools"><button type="button" data-zoom="in" aria-label="Agrandir">+</button><button type="button" data-zoom="out" aria-label="Réduire">−</button></div></div>`;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Tire vers la gauche pour ouvrir l'espace à droite.">${bands}${bodies}${guides}</svg><div class="chart-foot"><p class="panhint">Tire vers la gauche : l'espace vide s'ouvre à droite.</p><div class="chart-tools"><button type="button" data-zoom="in" aria-label="Agrandir">+</button><button type="button" data-zoom="out" aria-label="Réduire">−</button></div></div>`;
 }
 
 function chart(r, plan) {
@@ -685,7 +665,7 @@ function courseCard(r, plan, i) {
     </div>
     <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="kind" data-k="${esc(plan.kind)}">${plan.kind === "ZONE" ? "Zone" : esc(plan.kind)}</span><span class="subcall">${esc(plan.note)}</span></div>
     ${chart(r, plan)}
-    <p class="legend"><span><i class="zn entz"></i>zone du W</span><span><i class="zn dirz"></i>niveau</span><span><i class="ln obl"></i>support oblique</span><span><i class="ln ent"></i>entrée</span><span><i class="ln sln"></i>SL</span><span><i class="ln tpn"></i>TP</span></p>
+    <p class="legend"><span><i class="zn entz"></i>zone du W</span><span><i class="zn dirz"></i>niveau</span><span><i class="ln ent"></i>entrée</span><span><i class="ln sln"></i>SL</span><span><i class="ln tpn"></i>TP</span></p>
     <div class="rail" aria-hidden="true"><i style="width:${pct}%"></i></div>
     <dl class="lv">
       <div><dt>Entrée</dt><dd>${fmt(plan.ref, mk.dp)}</dd></div>
@@ -728,7 +708,7 @@ function zoneCard(r, i) {
     <div class="head"><div><p class="name">${esc(mk.name)}<span class="buf">${esc(spec.tf)}</span></p><div class="px">${r.price != null ? fmt(r.price, mk.dp) : "—"}</div></div></div>
     <p class="subcall">${esc(wait || r.reason || "Pas de W mûr.")}</p>
     ${chart(r, null)}
-    <p class="legend"><span><i class="zn entz"></i>zone du W</span><span><i class="zn dirz"></i>niveau</span><span><i class="ln obl"></i>support oblique</span><span><i class="ln tpn"></i>TP</span></p>
+    <p class="legend"><span><i class="zn entz"></i>zone du W</span><span><i class="zn dirz"></i>niveau</span><span><i class="ln tpn"></i>TP</span></p>
   </article>`;
 }
 
