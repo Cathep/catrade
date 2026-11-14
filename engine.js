@@ -31,6 +31,7 @@ var CT = (() => {
     evaluate: () => evaluate,
     fxBlocked: () => fxBlocked,
     gestionAt: () => gestionAt,
+    levelBeyond: () => levelBeyond,
     lotLoss: () => lotLoss,
     obliqueOn: () => obliqueOn,
     patternPlan: () => patternPlan,
@@ -715,6 +716,35 @@ var CT = (() => {
     if (!zone) return { standard: null, marks: kept };
     return { standard: { role: "entree", top: zone.top, bottom: zone.bottom, from: Math.max(zone.from, k.length - 1), side: zone.side }, marks: kept };
   }
+  function levelBeyond(k, dir, price) {
+    const wing = 3;
+    if (k.length < wing * 4) return null;
+    const highAt = (i) => {
+      for (let j = i - wing; j <= i + wing; j++) if (j !== i && k[j].h >= k[i].h) return false;
+      return true;
+    };
+    const lowAt = (i) => {
+      for (let j = i - wing; j <= i + wing; j++) if (j !== i && k[j].l <= k[i].l) return false;
+      return true;
+    };
+    let turn = -1;
+    for (let i = k.length - 1 - wing; i >= wing; i--) {
+      if (dir < 0 && highAt(i) && k[i].h > price) {
+        turn = i;
+        break;
+      }
+      if (dir > 0 && lowAt(i) && k[i].l < price) {
+        turn = i;
+        break;
+      }
+    }
+    if (turn < 0) return null;
+    for (let i = turn - wing; i >= wing; i--) {
+      if (dir < 0 && lowAt(i) && k[i].l < price) return { sl: k[turn].h, objective: k[i].l };
+      if (dir > 0 && highAt(i) && k[i].h > price) return { sl: k[turn].l, objective: k[i].h };
+    }
+    return null;
+  }
   function stopHasRoom(r, dist, reward) {
     if (!(dist > 0) || !(reward > dist) || reward > dist * 4) return false;
     const bars = (r.series?.length ? r.series : r.candles) ?? [];
@@ -722,13 +752,14 @@ var CT = (() => {
     if (ranges.length < 8) return true;
     return dist >= ranges[ranges.length >> 1];
   }
-  function confirmationSetup(r) {
+  function confirmationSetup(r, wide = false) {
     const k = r.series?.length ? r.series : r.candles ?? [];
     const dir = senseOf(k);
     const read = readAfter(k, r.zones ?? [], dir);
     const zone = read.standard;
     const bar = k.length ? k[k.length - 1] : null;
     if (!bar || !zone || r.price == null) return null;
+    const price = r.price;
     const range = bar.h - bar.l;
     const body = Math.abs(bar.c - bar.o);
     if (!(range > 0) || body < range * 0.55) return null;
@@ -736,9 +767,16 @@ var CT = (() => {
     const next = (r.zones ?? []).filter((z) => z.role === "directeur" && z !== zone && (dir > 0 ? z.bottom > zone.top : z.top < zone.bottom)).sort((a, b) => dir > 0 ? a.bottom - b.bottom : b.top - a.top)[0];
     if (!next) return null;
     const pad = (r.atr || range) * 0.12;
-    const sl = dir > 0 ? Math.min(bar.l, zone.bottom) - pad : Math.max(bar.h, zone.top) + pad;
-    const tp = dir > 0 ? next.bottom : next.top;
-    const price = r.price;
+    let sl = dir > 0 ? Math.min(bar.l, zone.bottom) - pad : Math.max(bar.h, zone.top) + pad;
+    let tp = dir > 0 ? next.bottom : next.top;
+    let objective = tp;
+    if (wide) {
+      const shaped = levelBeyond(k, dir, price);
+      if (!shaped) return null;
+      sl = dir > 0 ? shaped.sl - pad : shaped.sl + pad;
+      objective = shaped.objective;
+      tp = shyOf(price, objective);
+    }
     if (dir > 0 ? !(price > sl && price < tp) : !(price < sl && price > tp)) return null;
     const dist = Math.abs(price - sl);
     const reward = Math.abs(tp - price);
@@ -750,11 +788,11 @@ var CT = (() => {
       sl,
       dist,
       tp,
-      objective: tp,
+      objective,
       reward,
       step: 1,
       key: `c:${bar.t}:${zone.bottom.toFixed(4)}:${dir}`,
-      note: "Hausse et baisse ne se devinent pas sur la zone. Les deux r\xE8gles sont d'accord, puis le prix rejette le niveau."
+      note: wide ? "H4. Stop derri\xE8re le sommet ou le creux. TP un peu avant l'autre extr\xEAme." : "Hausse et baisse ne se devinent pas sur la zone. Les deux r\xE8gles sont d'accord, puis le prix rejette le niveau."
     };
   }
   function coursePlan(r, style) {
@@ -785,7 +823,7 @@ var CT = (() => {
         };
       }
     }
-    if (style.id === "swing") return null;
+    if (style.id === "swing") return confirmationSetup(r, true);
     return confirmationSetup(r);
   }
   function gestionAt(plan, q) {
