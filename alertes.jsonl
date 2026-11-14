@@ -84,3 +84,4 @@
 {"id":"suivi:W:1HZ75V:scalping:M:1794681900:1794689100:4036.380000:time","time":1794692527,"title":"60 % Volatility 75 (1s) Index","message":"60 % du chemin. Passe le stop en profit, vers 4057.134."}
 {"id":"suivi:W:1HZ75V:scalping:M:1794681900:1794689100:4036.380000:gain","time":1794692840,"title":"Profit Volatility 75 (1s) Index","message":"Le stop en profit est touché."}
 {"id":"suivi:W:1HZ100V:scalping:M:1794681900:1794690900:1295.220000:sl","time":1794693831,"title":"SL Volatility 100 (1s) Index","message":"Le stop est touché. La position est finie."}
+{"id":"suivi:W:1HZ25V:scalping:W:1794679200:1794682800:900219.820000:sl","time":1794696019,"title":"SL Volatility 25 (1s) Index","message":"Le stop est touché. La position est finie."}
