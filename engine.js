@@ -35,6 +35,7 @@ var CT = (() => {
     obliqueOn: () => obliqueOn,
     patternPlan: () => patternPlan,
     proposeLevels: () => proposeLevels,
+    readAfter: () => readAfter,
     replayCourse: () => replayCourse,
     simulateTrade: () => simulateTrade,
     styleById: () => styleById,
@@ -660,6 +661,24 @@ var CT = (() => {
     }
     return null;
   }
+  function readAfter(k, zones, dir) {
+    const majors = zones.filter((z) => z.role === "directeur" && z.top > z.bottom);
+    const marks = [];
+    const start = Math.max(0, k.length - 24);
+    for (let i = start; i < k.length; i++) {
+      const b = k[i];
+      for (const z of majors) {
+        if (b.h > z.top && b.c <= z.top && b.c >= z.bottom) marks.push({ i, price: b.h });
+        if (b.l < z.bottom && b.c >= z.bottom && b.c <= z.top) marks.push({ i, price: b.l });
+      }
+    }
+    const kept = marks.slice(-1);
+    if (!dir || !k.length) return { standard: null, marks: kept };
+    const bar = k[k.length - 1];
+    const zone = dir > 0 ? majors.filter((z) => z.side === "l" && bar.l <= z.top && bar.c >= z.top && bar.c > bar.o).sort((a, b) => b.top - a.top)[0] : majors.filter((z) => z.side === "h" && bar.h >= z.bottom && bar.c <= z.bottom && bar.c < bar.o).sort((a, b) => a.bottom - b.bottom)[0];
+    if (!zone) return { standard: null, marks: kept };
+    return { standard: { role: "entree", top: zone.top, bottom: zone.bottom, from: Math.max(zone.from, k.length - 1), side: zone.side }, marks: kept };
+  }
   function stopHasRoom(r, dist, reward) {
     if (!(dist > 0) || !(reward > dist) || reward > dist * 4) return false;
     const bars = (r.series?.length ? r.series : r.candles) ?? [];
@@ -668,18 +687,16 @@ var CT = (() => {
     return dist >= ranges[ranges.length >> 1];
   }
   function confirmationSetup(r) {
-    const zones = (r.zones ?? []).filter((z) => z.role === "directeur" && z.top > z.bottom);
-    const bar = r.series?.length ? r.series[r.series.length - 1] : r.candles?.length ? r.candles[r.candles.length - 1] : null;
-    if (!bar || r.price == null || zones.length < 2) return null;
+    const k = r.series?.length ? r.series : r.candles ?? [];
+    const read = readAfter(k, r.zones ?? [], r.dir);
+    const zone = read.standard;
+    const bar = k.length ? k[k.length - 1] : null;
+    if (!bar || !zone || r.price == null) return null;
     const range = bar.h - bar.l;
     const body = Math.abs(bar.c - bar.o);
     if (!(range > 0) || body < range * 0.55) return null;
-    const bull = bar.c > bar.o;
-    const touched = zones.filter((z) => bar.l <= z.top && bar.h >= z.bottom);
-    const zone = bull ? touched.filter((z) => bar.c >= z.top).sort((a, b) => b.top - a.top)[0] : touched.filter((z) => bar.c <= z.bottom).sort((a, b) => a.bottom - b.bottom)[0];
-    if (!zone) return null;
-    const dir = bull ? 1 : -1;
-    const next = zones.filter((z) => z !== zone && (dir > 0 ? z.bottom > zone.top : z.top < zone.bottom)).sort((a, b) => dir > 0 ? a.bottom - b.bottom : b.top - a.top)[0];
+    const dir = r.dir > 0 ? 1 : -1;
+    const next = (r.zones ?? []).filter((z) => z.role === "directeur" && z !== zone && (dir > 0 ? z.bottom > zone.top : z.top < zone.bottom)).sort((a, b) => dir > 0 ? a.bottom - b.bottom : b.top - a.top)[0];
     if (!next) return null;
     const pad = (r.atr || range) * 0.12;
     const sl = dir > 0 ? Math.min(bar.l, zone.bottom) - pad : Math.max(bar.h, zone.top) + pad;
@@ -700,7 +717,7 @@ var CT = (() => {
       reward,
       step: 1,
       key: `c:${bar.t}:${zone.bottom.toFixed(4)}:${dir}`,
-      note: "Bougie d\xE9termin\xE9e sur la zone. Le simple retour ne se prend pas. TP sur la zone d'apr\xE8s."
+      note: "Rejet sur le niveau d'entr\xE9e, dans le sens du mouvement. Pas de faux d\xE9bordement."
     };
   }
   function coursePlan(r, style) {
