@@ -27,7 +27,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "67";
+const BUILD = "68";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -687,7 +687,7 @@ function render(fresh) {
   grid.className = fresh ? "grid fresh" : "grid";
   const cards = plans.map((x, i) => courseCard(x.r, x.plan, i)).concat(rest.map((r, i) => zoneCard(r, plans.length + i)));
   grid.innerHTML = cards.length ? cards.join("") : `<div class="glass empty">${!reports.length || busy ? "Lecture en cours." : "Aucun prix reçu."}</div>`;
-  const othersTitle = document.querySelector("summary.sec");
+  const othersTitle = $("#othersTitle");
   if (othersTitle) othersTitle.textContent = rest.length ? `Les autres · ${rest.length}` : "Les autres";
   $("#others").innerHTML = rest.length ? rest.map((r) => {
     const mk = MARKETS.find((m) => m.id === r.id);
@@ -700,6 +700,8 @@ function render(fresh) {
     const ripe = plans.some((p) => p.r.id === r.id);
     return `<a class="namechip${ripe ? " on" : ""}" href="#m-${esc(r.id)}">${esc(mk.name)}</a>`;
   }).join("");
+  const namesTitle = $("#namesTitle");
+  if (namesTitle) namesTitle.textContent = listed.length ? `${family} · ${listed.length}` : family;
   $("#headline").textContent = !reports.length ? "Lecture des marchés…" : reports.every((r) => r.state === "erreur") ? "Prix illisibles." : plans.length ? `${plans.length} W mûr${plans.length > 1 ? "s" : ""}.` : "Aucun W mûr pour l'instant.";
   $("#sub").textContent = !reports.length ? "Les fiches arrivent dès que les prix sont lus." : reports.every((r) => r.state === "erreur") ? "La source des prix ne répond pas. Réessayez." : "Entrée dans le premier cinquième, sortie au cou.";
 }

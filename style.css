@@ -256,11 +256,24 @@ button { font: inherit; color: inherit; }
   font-size: 0.82rem;
 }
 
+.names-fold { margin-top: 0.85rem; }
+.names-fold summary {
+  list-style: none;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.9rem;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+}
+.names-fold summary::-webkit-details-marker { display: none; }
+.names-fold summary::before { content: "▸  "; color: var(--color-muted); }
+.names-fold[open] summary::before { content: "▾  "; }
 .names {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
-  margin-top: 0.7rem;
+  margin-top: 0.45rem;
 }
 
 .namechip {
