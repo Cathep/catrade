@@ -32,6 +32,7 @@ var CT = (() => {
     fxBlocked: () => fxBlocked,
     gestionAt: () => gestionAt,
     lotLoss: () => lotLoss,
+    obliqueOn: () => obliqueOn,
     patternPlan: () => patternPlan,
     proposeLevels: () => proposeLevels,
     replayCourse: () => replayCourse,
@@ -449,6 +450,52 @@ var CT = (() => {
   function zonesOn(k, style, pattern) {
     if (k.length < 16) return [];
     return traceZones(prepare(k, style), k.length - 1, style, pattern);
+  }
+  function obliqueOn(k) {
+    const n = k.length;
+    const wing = 5;
+    if (n < wing * 4) return null;
+    const highs = [];
+    const lows = [];
+    for (let i = wing; i <= n - 1 - wing; i++) {
+      let hi = true;
+      let lo = true;
+      for (let j = i - wing; j <= i + wing; j++) {
+        if (j === i) continue;
+        if (k[j].h >= k[i].h) hi = false;
+        if (k[j].l <= k[i].l) lo = false;
+      }
+      if (hi) highs.push({ i, p: k[i].h });
+      if (lo) lows.push({ i, p: k[i].l });
+    }
+    const pair = (pts, rising) => {
+      for (let i = pts.length - 1; i >= 1; i--) {
+        const a = pts[i - 1];
+        const b = pts[i];
+        if (b.i - a.i < 6) continue;
+        if (rising ? b.p > a.p : b.p < a.p) return { a, b };
+      }
+      return null;
+    };
+    const build = (seg, side) => {
+      if (!seg) return null;
+      const slope = (seg.b.p - seg.a.p) / (seg.b.i - seg.a.i);
+      if (!Number.isFinite(slope) || slope === 0) return null;
+      return { from: seg.a.i, price: seg.a.p, to: n - 1, priceTo: seg.b.p + slope * (n - 1 - seg.b.i), side };
+    };
+    const support = build(pair(lows, true), "l");
+    const resist = build(pair(highs, false), "h");
+    const last = k[n - 1].c;
+    const alive = (line) => {
+      if (!line) return false;
+      return line.side === "l" ? last >= line.priceTo : last <= line.priceTo;
+    };
+    if (alive(support) && alive(resist)) {
+      return Math.abs(last - support.priceTo) <= Math.abs(last - resist.priceTo) ? support : resist;
+    }
+    if (alive(support)) return support;
+    if (alive(resist)) return resist;
+    return null;
   }
   function ahead(dir, entry, px, gap) {
     return dir > 0 ? px > entry + gap : px < entry - gap;

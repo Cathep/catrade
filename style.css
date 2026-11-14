@@ -525,6 +525,7 @@ button { font: inherit; color: inherit; }
 
 .legend .sln { border-top-color: var(--color-sell); }
 .legend .tpn { border-top-color: var(--color-buy); }
+.legend .obl { border-top-style: solid; border-top-color: var(--color-focus); }
 .legend .zn { display: inline-block; width: 0.7rem; height: 0.45rem; margin-right: 0.35rem; border-radius: 2px; vertical-align: middle; }
 .legend .entz { background: rgb(157 187 255 / 0.55); }
 .legend .dirz { background: rgb(255 107 122 / 0.55); }
