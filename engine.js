@@ -388,17 +388,70 @@ var CT = (() => {
       }
       if (top > bottom) zones.push({ role: "entree", top, bottom, from: pattern.i1, side: "w" });
     }
-    const prior = priorTrend(k.slice(0, i + 1));
-    if (!prior) return zones;
+    const winStart = Math.max(0, i - 160);
     const ranges = [];
     for (let j = Math.max(0, i - 40); j <= i; j++) ranges.push(k[j].h - k[j].l);
     ranges.sort((a, b) => a - b);
     const typical = ranges.length ? ranges[ranges.length >> 1] : 0;
-    if (!(typical > 0)) return zones;
-    const half = typical * 0.35;
-    for (const s of prior.shelves) {
-      zones.push({ role: "directeur", top: s.price + half, bottom: s.price - half, from: s.at, side: s.side });
+    const wing = 8;
+    if (!(typical > 0) || i < wing * 2) return zones;
+    const pts = [];
+    for (let j = Math.max(winStart, wing); j <= i - wing; j++) {
+      let high = true;
+      let low = true;
+      for (let n = j - wing; n <= j + wing; n++) {
+        if (n === j) continue;
+        if (k[n].h >= k[j].h) high = false;
+        if (k[n].l <= k[j].l) low = false;
+      }
+      if (high) pts.push({ p: j, ext: k[j].h, side: "h" });
+      if (low) pts.push({ p: j, ext: k[j].l, side: "l" });
     }
+    pts.sort((a, b) => a.ext - b.ext);
+    const shelves = [];
+    for (const pt of pts) {
+      const last = shelves[shelves.length - 1];
+      if (last && Math.abs(pt.ext - last.anchor) <= typical * 1.25) {
+        last.n += 1;
+        last.from = Math.min(last.from, pt.p);
+        if (pt.side === "h" && pt.ext > last.ext) {
+          last.ext = pt.ext;
+          last.side = "h";
+        } else if (pt.side === "l" && last.side === "l" && pt.ext < last.ext) last.ext = pt.ext;
+      } else shelves.push({ anchor: pt.ext, side: pt.side, ext: pt.ext, from: pt.p, n: 1 });
+    }
+    let hi = -Infinity;
+    let lo = Infinity;
+    for (let j = Math.max(0, i - 119); j <= i; j++) {
+      hi = Math.max(hi, k[j].h);
+      lo = Math.min(lo, k[j].l);
+    }
+    const half = Math.min(typical * 0.35, (hi - lo) * 0.04);
+    let drafts = shelves.filter((s) => s.n >= 2).map((s) => ({
+      role: "directeur",
+      top: s.side === "h" ? s.ext : s.ext + half * 2,
+      bottom: s.side === "h" ? s.ext - half * 2 : s.ext,
+      from: s.from,
+      side: s.side,
+      n: s.n
+    })).sort((a, b) => (a.top + a.bottom) / 2 - (b.top + b.bottom) / 2);
+    const ordered = drafts.slice().sort((a, b) => a.bottom - b.bottom);
+    const groups = [];
+    for (const d of ordered) {
+      const g = groups[groups.length - 1];
+      const prev = g?.[g.length - 1];
+      const close = prev && d.bottom - prev.top < (prev.top - prev.bottom) * 3;
+      if (close && g) g.push(d);
+      else groups.push([d]);
+    }
+    let kept = [];
+    for (const g of groups) {
+      if (g.length >= 3) kept.push(g[0], g[g.length - 1]);
+      else if (g.length === 2) kept.push(g[0].n >= g[1].n ? g[0] : g[1]);
+      else kept.push(g[0]);
+    }
+    if (kept.length > 5) kept = kept.sort((a, b) => b.n - a.n).slice(0, 5);
+    zones.push(...kept.sort((a, b) => a.bottom - b.bottom).map((d) => ({ role: d.role, top: d.top, bottom: d.bottom, from: d.from, side: d.side })));
     return zones;
   }
   function zonesOn(k, style, pattern) {
