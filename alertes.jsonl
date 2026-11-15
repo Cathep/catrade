@@ -116,3 +116,5 @@
 {"id":"suivi:W:R_25:scalping:W:1794717900:1794724200:2964.718000:time","time":1794729245,"title":"40 % Volatility 25 Index","message":"40 % du chemin. Ramène le stop à l'entrée."}
 {"id":"suivi:ZONE:CRASH200:m5:reac:1794725400:102262.5980:-1:early","time":1794729551,"title":"80 % Crash 200 Index","message":"80 % du chemin. Tu peux fermer, sans attendre le prix exact."}
 {"id":"suivi:PALIER:R_50:m5:palier:1794711000:-1:87.1177:sl","time":1794730149,"title":"SL Volatility 50 Index","message":"Le stop est touché. La position est finie."}
+{"id":"suivi:ZONE:stpRNG10:m5:reac:1794727500:99834.0000:1:sl","time":1794730452,"title":"SL Step Index 1000","message":"Le stop est touché. La position est finie."}
+{"id":"suivi:W:R_25:scalping:W:1794717900:1794724200:2964.718000:be","time":1794730997,"title":"Entrée Volatility 25 Index","message":"Retour à l'entrée après 40 %. Le risque n'est pas perdu."}
