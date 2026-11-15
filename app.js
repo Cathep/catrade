@@ -29,7 +29,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "112";
+const BUILD = "113";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -357,7 +357,7 @@ function zonesForView(r, start, view) {
   const src = sourceOf(r);
   let last = Math.min(src.length - 1, start);
   for (let i = 0; i < view; i++) if (start + i < src.length) last = start + i;
-  const from = Math.max(0, last - 200);
+  const from = Math.max(0, last - 640);
   const slice = src.slice(from, last + 1);
   let zones = [];
   try { zones = CT.zonesOn(slice, styleById(styleId), null) || []; }
@@ -393,8 +393,16 @@ function chartInner(r, plan) {
   const read = CT.readAfter(slice, traced, sense);
   const zones = traced.filter((z) => z.role === "directeur" || z.role === "entree");
   const W = 300, H = 128;
-  const hi = Math.max(...real.map((b) => b.h));
-  const lo = Math.min(...real.map((b) => b.l));
+  const hi0 = Math.max(...real.map((b) => b.h));
+  const lo0 = Math.min(...real.map((b) => b.l));
+  const span0 = hi0 - lo0 || 1;
+  let hi = hi0;
+  let lo = lo0;
+  for (const z of zones) {
+    if (z.top < lo0 - span0 || z.bottom > hi0 + span0) continue;
+    hi = Math.max(hi, z.top);
+    lo = Math.min(lo, z.bottom);
+  }
   const span = hi - lo || 1;
   const slot = W / view;
   const x = (i) => (i + 0.5) * slot;

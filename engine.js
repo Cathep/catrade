@@ -826,13 +826,13 @@ var CT = (() => {
     ranges.sort((a, b) => a - b);
     return ranges.length ? ranges[ranges.length >> 1] : 0;
   }
-  function priorTrend(k) {
+  function trendWithin(k, win) {
     const wing = 4;
     if (k.length < wing * 8) return null;
     const typical = medianRange(k, Math.max(0, k.length - 40), k.length - 1);
     if (!(typical > 0)) return null;
     const raw = swingMarks(k, wing);
-    const from = Math.max(wing, k.length - 160);
+    const from = Math.max(wing, k.length - win);
     const highs = raw.highs.filter((h) => h.i >= from);
     const lows = raw.lows.filter((l) => l.i >= from);
     if (!highs.length || !lows.length) return null;
@@ -879,9 +879,10 @@ var CT = (() => {
       side = "l";
       pool = lows.filter((l) => l.i > start.i + wing && l.i < top.i - wing);
     }
-    if (pool.length < 1) return null;
+    const seeds = pool.slice();
+    if (!seeds.some((s) => s.i === origin.i)) seeds.push(origin);
     const gap = Math.max(typical * 1.5, Math.abs(origin.p - passage.p) * 0.08);
-    const sorted = pool.slice().sort((a, b) => a.p - b.p);
+    const sorted = seeds.slice().sort((a, b) => a.p - b.p);
     const groups = [];
     for (const s of sorted) {
       const g = groups[groups.length - 1];
@@ -904,6 +905,24 @@ var CT = (() => {
       objectiveAt: origin.i,
       shelves
     };
+  }
+  function priorTrend(k) {
+    let loose = null;
+    for (const win of [200, 400, 640]) {
+      const found = trendWithin(k, win);
+      if (!found) continue;
+      if (!loose) loose = found;
+      const a = Math.max(0, k.length - 70);
+      let hi = -Infinity;
+      let lo = Infinity;
+      for (let i = a; i < k.length; i++) {
+        hi = Math.max(hi, k[i].h);
+        lo = Math.min(lo, k[i].l);
+      }
+      const span = Math.max(hi - lo, 0);
+      if (found.shelves.some((s) => s.price <= hi + span && s.price >= lo - span)) return found;
+    }
+    return loose;
   }
   function palierPlan(r) {
     const k = r.series?.length ? r.series : r.candles ?? [];
