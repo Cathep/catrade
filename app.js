@@ -29,7 +29,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "116";
+const BUILD = "117";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -410,7 +410,7 @@ function chartInner(r, plan) {
     hi = Math.max(hi, z.top);
     lo = Math.min(lo, z.bottom);
   }
-  if (drawn) for (const ln of drawn.lines) if (near(ln.price)) { hi = Math.max(hi, ln.price); lo = Math.min(lo, ln.price); }
+  if (drawn) for (const ln of drawn.lines) if (ln.kind !== "objectif" && near(ln.price)) { hi = Math.max(hi, ln.price); lo = Math.min(lo, ln.price); }
   const span = hi - lo || 1;
   const slot = W / view;
   const x = (i) => (i + 0.5) * slot;
@@ -428,6 +428,7 @@ function chartInner(r, plan) {
   let structure = "";
   if (drawn) {
     for (const ln of drawn.lines) {
+      if (ln.kind === "objectif") continue;
       const yy = y(ln.price);
       if (!Number.isFinite(yy) || yy < -8 || yy > H + 8) continue;
       const local = ln.from - start;

@@ -1209,28 +1209,32 @@ var CT = (() => {
     if (kept.length >= 3 && Math.abs(kept[2].p - kept[0].p) <= atr * 1.2) kept.splice(1, 1);
     return kept;
   }
-  function threeTouch(swings, up) {
-    let best = null;
-    let span = 0;
-    for (let a = 0; a < swings.length; a++) {
-      for (let b = a + 1; b < swings.length; b++) {
-        for (let c = b + 1; c < swings.length; c++) {
-          const rising = swings[a].p < swings[b].p && swings[b].p < swings[c].p;
-          const falling = swings[a].p > swings[b].p && swings[b].p > swings[c].p;
-          if (up ? !rising : !falling) continue;
-          const width = swings[c].i - swings[a].i;
-          if (!(width > 0)) continue;
-          const t = (swings[b].i - swings[a].i) / width;
-          const at = swings[a].p + (swings[c].p - swings[a].p) * t;
-          if (Math.abs(swings[b].p - at) > Math.abs(swings[c].p - swings[a].p) * 0.2) continue;
-          if (width > span) {
-            span = width;
-            best = { i1: swings[a].i, p1: swings[a].p, i2: swings[c].i, p2: swings[c].p };
-          }
-        }
+  function obliqueOf(k, up) {
+    const { highs, lows } = pivotsOf(k, 4);
+    const swings = up ? lows : highs;
+    const atr = smaTR(k, 14);
+    if (!(atr > 0) || swings.length < 3) return null;
+    const room = atr * 0.35;
+    for (let a = swings.length - 3; a >= 0; a--) {
+      const A = swings[a];
+      const B = swings[a + 1];
+      const C = swings[a + 2];
+      if (up ? !(A.p < B.p && B.p < C.p) : !(A.p > B.p && B.p > C.p)) continue;
+      const width = C.i - A.i;
+      if (!(width > 0)) continue;
+      const pente = (C.p - A.p) / width;
+      const mid = A.p + pente * (B.i - A.i);
+      if (Math.abs(B.p - mid) > room) continue;
+      let bad = 0;
+      let seen = 0;
+      for (let i = A.i; i < k.length; i++) {
+        const at = A.p + pente * (i - A.i);
+        seen += 1;
+        if (up ? k[i].c < at - room : k[i].c > at + room) bad += 1;
       }
+      if (seen > 0 && bad / seen <= 0.05) return { i1: A.i, p1: A.p, i2: C.i, p2: C.p };
     }
-    return best;
+    return null;
   }
   function maxwellOn(k, styleId) {
     if (k.length < 40) return null;
@@ -1252,7 +1256,7 @@ var CT = (() => {
       from: toChart(s.i),
       side: highs.some((h) => h.i === s.i) ? "h" : "l"
     }));
-    const touch = threeTouch(found.up ? lows : highs, found.up);
+    const touch = obliqueOf(k, found.up);
     return {
       up: found.up,
       zones,
@@ -1260,7 +1264,7 @@ var CT = (() => {
         { kind: "objectif", price: found.objective.p, from: toChart(found.objective.i) },
         { kind: "passage", price: found.pass.p, from: toChart(found.pass.i) }
       ],
-      oblique: touch ? { i1: toChart(touch.i1), p1: touch.p1, i2: toChart(touch.i2), p2: touch.p2 } : null
+      oblique: touch
     };
   }
   function alignedPlan(big, small, higher = null) {
