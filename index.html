@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=31">
+<link rel="stylesheet" href="style.css?v=32">
 </head>
 <body>
 <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -42,15 +42,15 @@
       <div class="seg families" id="families" role="group" aria-label="Famille"></div>
     </div>
     <p class="stack" id="stack"></p>
-    <details class="names-fold" id="namesFold" open>
+    <details class="names-fold" id="namesFold">
       <summary id="namesTitle">Dans la famille</summary>
       <div class="names" id="names"></div>
     </details>
   </section>
-  <section class="panel glass" id="ouvert">
-    <h3 class="sec">Positions notifiées</h3>
+  <details class="panel glass" id="ouvert">
+    <summary class="sec">Positions notifiées</summary>
     <div class="grid" id="ouvertGrid"></div>
-  </section>
+  </details>
   <div class="grid" id="grid"></div>
   <details class="panel glass fold">
     <summary class="sec" id="othersTitle">Les autres</summary>
@@ -95,8 +95,8 @@
     <button class="btn" id="notif" type="button">Alerter dans cette page</button>
   </div>
 </div>
-<script src="engine.js?v=111"></script>
-<script src="app.js?v=111"></script>
+<script src="engine.js?v=112"></script>
+<script src="app.js?v=112"></script>
 <script>
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
 </script>

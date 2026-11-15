@@ -256,7 +256,13 @@ button { font: inherit; color: inherit; }
   font-size: 0.82rem;
 }
 
-.names-fold { margin-top: 0.85rem; }
+#ouvert summary.sec {
+  cursor: pointer;
+  list-style: none;
+}
+#ouvert summary.sec::-webkit-details-marker { display: none; }
+#ouvert summary.sec::before { content: "▸  "; color: var(--color-muted); }
+#ouvert[open] summary.sec::before { content: "▾  "; }
 .names-fold summary {
   list-style: none;
   cursor: pointer;
