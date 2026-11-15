@@ -29,7 +29,7 @@ if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "115";
+const BUILD = "116";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -353,16 +353,22 @@ function obliqueForView(r, start, view) {
   return { ...line, from: line.from + from, touch: line.touch + from, to: line.to + from };
 }
 
-function zonesForView(r, start, view) {
+function maxwellForView(r, start, view) {
   const src = sourceOf(r);
   let last = Math.min(src.length - 1, start);
   for (let i = 0; i < view; i++) if (start + i < src.length) last = start + i;
-  const from = Math.max(0, last - 200);
+  const from = Math.max(0, last - 1500);
   const slice = src.slice(from, last + 1);
-  let zones = [];
-  try { zones = CT.zonesOn(slice, styleById(styleId), null) || []; }
-  catch (e) { zones = []; }
-  return zones.map((z) => ({ ...z, from: z.from + from }));
+  let read = null;
+  try { read = CT.maxwellOn(slice, styleId); } catch (e) { read = null; }
+  if (!read) return null;
+  const shift = (i) => i + from;
+  return {
+    up: read.up,
+    zones: (read.zones || []).map((z) => ({ ...z, from: shift(z.from) })),
+    lines: (read.lines || []).map((z) => ({ ...z, from: shift(z.from) })),
+    oblique: read.oblique ? { ...read.oblique, i1: shift(read.oblique.i1), i2: shift(read.oblique.i2) } : null,
+  };
 }
 
 function frameOf(r) {
@@ -386,15 +392,25 @@ function chartInner(r, plan) {
   const { start, bars, view } = frameOf(r);
   const real = bars.filter(Boolean);
   if (real.length < 2 || r.price == null) return "";
-  const traced = zonesForView(r, start, view);
+  const drawn = maxwellForView(r, start, view);
   const slice = sourceOf(r).slice(Math.max(0, start), start + view);
   let sense = 0;
-  try { sense = CT.senseOf(slice); } catch (e) { sense = 0; }
-  const read = CT.readAfter(slice, traced, sense);
-  const zones = traced.filter((z) => z.role === "directeur" || z.role === "entree");
+  try { sense = drawn ? (drawn.up ? 1 : -1) : CT.senseOf(slice); } catch (e) { sense = 0; }
+  const zones = drawn ? drawn.zones : [];
+  const read = CT.readAfter(slice, zones, sense);
   const W = 300, H = 128;
-  const hi = Math.max(...real.map((b) => b.h));
-  const lo = Math.min(...real.map((b) => b.l));
+  const hi0 = Math.max(...real.map((b) => b.h));
+  const lo0 = Math.min(...real.map((b) => b.l));
+  const span0 = hi0 - lo0 || 1;
+  let hi = hi0;
+  let lo = lo0;
+  const near = (p) => p >= lo0 - span0 && p <= hi0 + span0;
+  for (const z of zones) {
+    if (!near(z.top) && !near(z.bottom)) continue;
+    hi = Math.max(hi, z.top);
+    lo = Math.min(lo, z.bottom);
+  }
+  if (drawn) for (const ln of drawn.lines) if (near(ln.price)) { hi = Math.max(hi, ln.price); lo = Math.min(lo, ln.price); }
   const span = hi - lo || 1;
   const slot = W / view;
   const x = (i) => (i + 0.5) * slot;
@@ -407,8 +423,31 @@ function chartInner(r, plan) {
     if (!(h > 0) || !Number.isFinite(yy)) return "";
     const left = local <= 0 ? 0 : x(local) - slot / 2;
     const color = z.role === "entree" ? "var(--color-focus)" : "var(--color-sell)";
-    return `<rect x="${left}" y="${yy}" width="${Math.max(1, W - left)}" height="${h}" fill="${color}" fill-opacity="0.22" stroke="${color}" stroke-opacity="0.85" stroke-width="1"/>`;
+    return `<rect x="${left}" y="${yy}" width="${Math.max(1, W - left)}" height="${h}" fill="${color}" fill-opacity="0.45" stroke="${color}" stroke-opacity="0.9" stroke-width="1.4"/>`;
   }).join("");
+  let structure = "";
+  if (drawn) {
+    for (const ln of drawn.lines) {
+      const yy = y(ln.price);
+      if (!Number.isFinite(yy) || yy < -8 || yy > H + 8) continue;
+      const local = ln.from - start;
+      const x1 = local <= 0 ? 0 : x(Math.min(view - 1, local)) - slot / 2;
+      const dash = ln.kind === "objectif" ? "5 3" : "1 3";
+      const color = ln.kind === "objectif" ? "var(--color-warn)" : "var(--color-focus)";
+      structure += `<line x1="${Math.max(0, x1)}" x2="${W}" y1="${yy}" y2="${yy}" stroke="${color}" stroke-dasharray="${dash}" stroke-width="1.3"/>`;
+    }
+    const ob = drawn.oblique;
+    if (ob && ob.i2 > ob.i1) {
+      const i1 = ob.i1 - start;
+      const i2 = ob.i2 - start;
+      const pente = (ob.p2 - ob.p1) / (i2 - i1);
+      const left = Math.max(0, Math.min(view - 1, i1));
+      const right = view - 1;
+      const y1 = y(ob.p1 + pente * (left - i1));
+      const y2 = y(ob.p1 + pente * (right - i1));
+      if (Number.isFinite(y1) && Number.isFinite(y2)) structure += `<line x1="${x(left)}" y1="${y1}" x2="${x(right)}" y2="${y2}" stroke="var(--color-warn)" stroke-width="1.5"/>`;
+    }
+  }
   const marks = (read.marks || []).map((m) => {
     const i = m.i;
     if (i < 0 || i >= view || !bars[i]) return "";
@@ -433,7 +472,7 @@ function chartInner(r, plan) {
     guides = line(plan.ref, "var(--color-warn)", "2 3") + line(plan.sl, "var(--color-sell)", "1 3") + line(plan.tp, "var(--color-buy)", "4 3");
     if (plan.kind !== "W" && Math.abs(plan.objective - plan.tp) > plan.dist * 0.02) guides += line(plan.objective, "var(--color-focus)", "1 4");
   }
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Tire vers la gauche pour ouvrir l'espace à droite.">${bands}${bodies}${marks}${guides}</svg><div class="chart-foot"><p class="panhint">Tire vers la gauche : l'espace vide s'ouvre à droite.</p><div class="chart-tools"><button type="button" data-zoom="in" aria-label="Agrandir">+</button><button type="button" data-zoom="out" aria-label="Réduire">−</button></div></div>`;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Tire vers la gauche pour ouvrir l'espace à droite.">${bands}${structure}${bodies}${marks}${guides}</svg><div class="chart-foot"><p class="panhint">Tire vers la gauche : l'espace vide s'ouvre à droite.</p><div class="chart-tools"><button type="button" data-zoom="in" aria-label="Agrandir">+</button><button type="button" data-zoom="out" aria-label="Réduire">−</button></div></div>`;
 }
 
 function alertPlan(r) {

@@ -36,6 +36,7 @@ var CT = (() => {
     groupCandles: () => groupCandles,
     levelBeyond: () => levelBeyond,
     lotLoss: () => lotLoss,
+    maxwellOn: () => maxwellOn,
     obliqueOn: () => obliqueOn,
     palierPlan: () => palierPlan,
     patternPlan: () => patternPlan,
@@ -1065,6 +1066,202 @@ var CT = (() => {
       });
     }
     return out;
+  }
+  function smaTR(k, len) {
+    if (k.length < 2) return 0;
+    const from = Math.max(1, k.length - len);
+    let sum = 0;
+    let n = 0;
+    for (let i = from; i < k.length; i++) {
+      const prev = k[i - 1].c;
+      sum += Math.max(k[i].h - k[i].l, Math.abs(k[i].h - prev), Math.abs(k[i].l - prev));
+      n += 1;
+    }
+    return n ? sum / n : 0;
+  }
+  function pivotsOf(k, lb) {
+    const highs = [];
+    const lows = [];
+    for (let i = lb; i <= k.length - 1 - lb; i++) {
+      let hi = true;
+      let lo = true;
+      for (let j = i - lb; j <= i + lb; j++) {
+        if (j === i) continue;
+        if (k[j].h >= k[i].h) hi = false;
+        if (k[j].l <= k[i].l) lo = false;
+      }
+      if (hi) highs.push({ i, p: k[i].h });
+      if (lo) lows.push({ i, p: k[i].l });
+    }
+    return { highs: highs.slice(-96), lows: lows.slice(-96) };
+  }
+  function impulseIsUp(k, from, to) {
+    let up = 0;
+    let dn = 0;
+    const end = Math.min(k.length - 1, to);
+    for (let i = Math.max(1, from + 1); i <= end; i++) {
+      const d = k[i].c - k[i - 1].c;
+      if (d > 0) up += d;
+      else dn -= d;
+    }
+    return up > dn;
+  }
+  function netteteOf(k) {
+    const { highs, lows } = pivotsOf(k, 4);
+    const pts = [...highs, ...lows].sort((a, b) => a.i - b.i);
+    if (pts.length < 4) return 0;
+    const swings = [];
+    for (let i = 1; i < pts.length; i++) swings.push(Math.abs(pts[i].p - pts[i - 1].p));
+    const last = swings.slice(-6);
+    const avg = last.reduce((s, x) => s + x, 0) / last.length;
+    const atr = smaTR(k, 14);
+    return atr > 0 ? avg / atr : 0;
+  }
+  function pickAnalysis(k, styleId) {
+    const step = styleId === "scalping" ? 900 : styleId === "swing" ? 14400 : 3600;
+    const h1 = Math.max(1, Math.round(3600 / step));
+    const h4 = Math.max(1, Math.round(14400 / step));
+    const day = Math.max(1, Math.round(86400 / step));
+    const week = Math.max(1, Math.round(7 * 86400 / step));
+    let size = 1;
+    if (styleId === "scalping") size = h1;
+    else if (styleId === "swing") size = week;
+    else {
+      const daily = groupCandles(k, day);
+      const four = groupCandles(k, h4);
+      size = netteteOf(daily) >= 2 || netteteOf(four) < netteteOf(daily) ? day : h4;
+    }
+    let bars = groupCandles(k, size);
+    if (bars.length < 40) {
+      size = 1;
+      bars = k.slice();
+    }
+    return { bars, size, rem: size > 1 ? k.length % size : 0 };
+  }
+  function structureOf(k) {
+    const { highs, lows } = pivotsOf(k, 4);
+    if (lows.length < 3) return null;
+    const last = k.length - 1;
+    for (let n = lows.length - 1; n >= 2; n--) {
+      const signeAvant = lows[n - 2].p > lows[n - 1].p;
+      const signeApres = lows[n - 1].p > lows[n].p;
+      if (signeAvant === signeApres) continue;
+      const up = !signeApres;
+      let pass = lows[n - 1];
+      const next = n < lows.length - 1 ? lows[n + 1].i : last;
+      if (!up) {
+        let top = null;
+        for (const h of highs) {
+          if (h.i > pass.i && h.i <= lows[n].i && (!top || h.p > top.p)) top = h;
+        }
+        if (!top) continue;
+        pass = top;
+      }
+      if (impulseIsUp(k, pass.i, next) !== up) continue;
+      let upN = 0;
+      let dnN = 0;
+      for (let q = 1; q < lows.length; q++) {
+        if (lows[q].i < pass.i) continue;
+        if (lows[q].p > lows[q - 1].p) upN += 1;
+        else dnN += 1;
+      }
+      if (upN + dnN >= 3 && (up ? upN < dnN : dnN < upN)) continue;
+      const pool = up ? highs : lows;
+      let origin = null;
+      for (const s of pool) {
+        if (s.i >= pass.i) continue;
+        if (!origin || (up ? s.p > origin.p : s.p < origin.p)) origin = s;
+      }
+      if (!origin) continue;
+      return { up, pass, objective: origin };
+    }
+    return null;
+  }
+  function zonesFrom(swings, atr, price, objective) {
+    const tol = atr * 0.6;
+    const ep = atr * 0.5;
+    const merged = [];
+    for (let i = swings.length - 1; i >= 0; i--) {
+      const s = swings[i];
+      const hit = merged.find((m) => Math.abs(m.p - s.p) <= tol);
+      if (hit) {
+        if (s.i < hit.i) hit.i = s.i;
+      } else merged.push({ i: s.i, p: s.p });
+    }
+    const ranked = merged.filter((m) => Math.abs(m.p - objective) > ep * 4).map((m) => {
+      let n = 0;
+      let last = -1e9;
+      for (const s of swings) {
+        if (Math.abs(s.p - m.p) <= ep && Math.abs(s.i - last) >= 20) {
+          n += 1;
+          last = s.i;
+        }
+      }
+      return { i: m.i, p: m.p, n: n > 0 ? n - 1 : 0 };
+    }).sort((a, b) => b.n - a.n || Math.abs(a.p - price) - Math.abs(b.p - price));
+    const kept = [];
+    for (const s of ranked) {
+      if (kept.length >= 3) break;
+      if (kept.some((z) => Math.abs(z.p - s.p) <= ep * 4)) continue;
+      kept.push({ i: s.i, p: s.p });
+    }
+    kept.sort((a, b) => a.p - b.p);
+    if (kept.length >= 3 && Math.abs(kept[2].p - kept[0].p) <= atr * 1.2) kept.splice(1, 1);
+    return kept;
+  }
+  function threeTouch(swings, up) {
+    let best = null;
+    let span = 0;
+    for (let a = 0; a < swings.length; a++) {
+      for (let b = a + 1; b < swings.length; b++) {
+        for (let c = b + 1; c < swings.length; c++) {
+          const rising = swings[a].p < swings[b].p && swings[b].p < swings[c].p;
+          const falling = swings[a].p > swings[b].p && swings[b].p > swings[c].p;
+          if (up ? !rising : !falling) continue;
+          const width = swings[c].i - swings[a].i;
+          if (!(width > 0)) continue;
+          const t = (swings[b].i - swings[a].i) / width;
+          const at = swings[a].p + (swings[c].p - swings[a].p) * t;
+          if (Math.abs(swings[b].p - at) > Math.abs(swings[c].p - swings[a].p) * 0.2) continue;
+          if (width > span) {
+            span = width;
+            best = { i1: swings[a].i, p1: swings[a].p, i2: swings[c].i, p2: swings[c].p };
+          }
+        }
+      }
+    }
+    return best;
+  }
+  function maxwellOn(k, styleId) {
+    if (k.length < 40) return null;
+    const { bars, size, rem } = pickAnalysis(k, styleId);
+    if (bars.length < 40) return null;
+    const found = structureOf(bars);
+    if (!found) return null;
+    const atr = smaTR(bars, 14);
+    if (!(atr > 0)) return null;
+    const { highs, lows } = pivotsOf(bars, 4);
+    const toChart = (i) => rem + i * size;
+    const half = atr * 0.5;
+    const price = bars[bars.length - 1].c;
+    const chosen = zonesFrom([...highs, ...lows], atr, price, found.objective.p);
+    const zones = chosen.map((s) => ({
+      role: "directeur",
+      top: s.p + half,
+      bottom: s.p - half,
+      from: toChart(s.i),
+      side: highs.some((h) => h.i === s.i) ? "h" : "l"
+    }));
+    const touch = threeTouch(found.up ? lows : highs, found.up);
+    return {
+      up: found.up,
+      zones,
+      lines: [
+        { kind: "objectif", price: found.objective.p, from: toChart(found.objective.i) },
+        { kind: "passage", price: found.pass.p, from: toChart(found.pass.i) }
+      ],
+      oblique: touch ? { i1: toChart(touch.i1), p1: touch.p1, i2: toChart(touch.i2), p2: touch.p2 } : null
+    };
   }
   function alignedPlan(big, small, higher = null) {
     if (big.price == null || small.price == null) return null;
