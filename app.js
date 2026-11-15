@@ -20,14 +20,17 @@ function esc(s) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let styleId = store.get("ct.style", "day");
+if (styleId !== "scalping" && styleId !== "day" && styleId !== "swing") styleId = "day";
 let family = store.get("ct.family", "Volatility");
+let openById = new Map();
+let focusedAlert = "";
 const FAMILIES = [];
 for (const m of MARKETS) if (m.aka && !FAMILIES.includes(m.aka)) FAMILIES.push(m.aka);
 if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "84";
+const BUILD = "110";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -385,12 +388,11 @@ function chartInner(r, plan) {
   const real = bars.filter(Boolean);
   if (real.length < 2 || r.price == null) return "";
   const traced = zonesForView(r, start, view);
-  const live = start + view >= sourceOf(r).length - 8;
   const slice = sourceOf(r).slice(Math.max(0, start), start + view);
   let sense = 0;
   try { sense = CT.senseOf(slice); } catch (e) { sense = 0; }
   const read = CT.readAfter(slice, traced, sense);
-  const zones = traced.filter((z) => z.role === "directeur").concat(read.standard ? [read.standard] : []).concat(live && plan && plan.kind === "W" ? (r.zones || []).filter((z) => z.role === "entree") : []);
+  const zones = traced.filter((z) => z.role === "directeur" || z.role === "entree");
   const W = 300, H = 128;
   const hi = Math.max(...real.map((b) => b.h));
   const lo = Math.min(...real.map((b) => b.l));
@@ -435,6 +437,14 @@ function chartInner(r, plan) {
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Tire vers la gauche pour ouvrir l'espace à droite.">${bands}${bodies}${marks}${guides}</svg><div class="chart-foot"><p class="panhint">Tire vers la gauche : l'espace vide s'ouvre à droite.</p><div class="chart-tools"><button type="button" data-zoom="in" aria-label="Agrandir">+</button><button type="button" data-zoom="out" aria-label="Réduire">−</button></div></div>`;
 }
 
+function alertPlan(r) {
+  const row = openById.get(r.id);
+  if (!row) return null;
+  const token = styleId === "scalping" ? "m5" : styleId === "swing" ? "h4" : "h1";
+  if (row.tf && row.tf !== token) return null;
+  return { kind: "ZONE", dir: row.dir, ref: row.entry, sl: row.sl, tp: row.tp, objective: row.tp, dist: Math.abs(row.entry - row.sl), note: "Alerte envoyée. Les trois niveaux restent sur le graphe." };
+}
+
 function chart(r, plan) {
   if (sourceOf(r).length < 2 || r.price == null) return "";
   return `<div class="chart-pan" data-id="${esc(r.id)}">${chartInner(r, plan)}</div>`;
@@ -444,7 +454,7 @@ function repaintChart(id) {
   const found = reports.find((x) => x.id === id);
   const box = document.querySelector('.chart-pan[data-id="' + id + '"]');
   if (!found || !box) return;
-  box.innerHTML = chartInner(found, CT.coursePlan(found, styleById(styleId)));
+  box.innerHTML = chartInner(found, found.prise || alertPlan(found));
 }
 
 const olderBusy = {};
@@ -551,7 +561,9 @@ document.addEventListener("pointercancel", releasePoint);
 
 function card(r, i) {
   const mk = MARKETS.find((m) => m.id === r.id);
-  const sell = r.dir < 0;
+  const alerted = alertPlan(r);
+  const live = r.prise || alerted;
+  const sell = live ? live.dir < 0 : r.dir < 0;
   const w = winPct(r);
   const [rk, rl] = riskOf(r);
   const ringc = r.record.n < 8 ? "var(--color-muted)" : w >= 45 ? "var(--color-buy)" : "var(--color-warn)";
@@ -562,10 +574,14 @@ function card(r, i) {
   const hitN = res ? res.tp.filter(Boolean).length : 0;
   const closed = finished || (plan && plan.status === "partiel");
   const first = res && res.events[0];
-  const kind = !r.pattern ? "W/M non détecté" : first && first.kind === "sl" && closed ? "SL touché" : first && first.kind === "tp" && closed ? "TP atteint" : plan && plan.status === "partiel" ? `TP ${hitN} atteint` : r.pattern.slow && r.pattern.secondPart && r.pattern.reintegrated && !r.pattern.tooFar ? `${r.pattern.side} à juger` : `${r.pattern.side} possible`;
-  const kindOk = !finished && r.pattern && r.pattern.reintegrated && r.pattern.secondPart && !r.pattern.slHit;
+  const kind = live ? "ZONE" : !r.pattern ? "W/M non détecté" : first && first.kind === "sl" && closed ? "SL touché" : first && first.kind === "tp" && closed ? "TP atteint" : plan && plan.status === "partiel" ? `TP ${hitN} atteint` : r.pattern.slow && r.pattern.secondPart && r.pattern.reintegrated && !r.pattern.tooFar ? `${r.pattern.side} à juger` : `${r.pattern.side} possible`;
+  const kindOk = live ? true : !finished && r.pattern && r.pattern.reintegrated && r.pattern.secondPart && !r.pattern.slHit;
   const move = plan && r.price != null ? r.dir * (r.price - plan.entry) : 0;
-  const levels = plan ? `<dl class="lv">
+  const levels = live ? `<dl class="lv">
+      <div><dt>Entrée</dt><dd>${fmt(live.ref, mk.dp)}</dd><span>notifié</span></div>
+      <div><dt>SL</dt><dd class="sl">${fmt(live.sl, mk.dp)}</dd></div>
+      <div><dt>TP</dt><dd class="tp">${fmt(live.tp, mk.dp)}</dd></div>
+    </dl>` : plan ? `<dl class="lv">
       <div><dt>Entrée</dt><dd>${fmt(plan.entry, mk.dp)}</dd><span>${plan.entryKind === "cou" ? "au cou" : "au cours"}</span></div>
       <div><dt>SL</dt><dd class="sl">${fmt(plan.sl, mk.dp)}</dd><span>${closed ? slWord(res) : esc(distText(mk, plan.dist))}</span></div>
       ${plan.tps.map((t, i) => `<div><dt>TP ${plan.tps.length > 1 ? i + 1 : 1}</dt><dd class="${res.tp[i] && !(res.events[0] && res.events[0].kind === "sl") ? "tp" : ""}">${fmt(t.price, mk.dp)}</dd><span>${closed || res.tp[i] ? tpWord(res, i) : esc(distText(mk, t.reward))}</span></div>`).join("")}
@@ -601,7 +617,7 @@ function card(r, i) {
       <div class="ring" style="--p:${r.record.n ? Math.round(w) : 0};--ringc:${ringc}" role="img" aria-label="${r.record.n ? Math.round(w) + " % de cas gagnants" : "Peu de cas"}"><b>${r.record.n ? Math.round(w) + " %" : "—"}<small>${r.record.n ? "gagnants" : "peu de cas"}</small></b></div>
     </div>
     <div><span class="call">${finished ? (sell ? "Vente terminée" : "Achat terminé") : sell ? "Vendre" : "Acheter"}</span><span class="${kindOk ? "kind ok" : "kind"}">${esc(kind)}</span><span class="buf">buffer ${r.buffer > 0 ? "+" + r.buffer : r.buffer}</span><span class="subcall">${closed && res ? esc(verdictText(plan, res)) : r.manual ? "Sens à examiner, pas une entrée automatique." : "Mode historique : le motif filtre le sens."}</span></div>
-    ${chart(r)}
+    ${chart(r, live)}
     ${levels}
     <div class="risk" data-r="${rk}"><b class="lvl">${rl}</b><ul><li>${esc(r.reason)}</li>${notes}<li>${esc(past)}</li></ul></div>
     ${sim}
@@ -616,7 +632,7 @@ function simulate(box) {
   const mk = MARKETS.find((m) => m.id === id);
   const spec = specOf(mk);
   const lots = lotFor(mk);
-  const course = typeof CT.coursePlan === "function" ? CT.coursePlan(r, styleById(styleId)) : null;
+  const course = r.prise || null;
   const metal = mk.cls === "gold" || /^frxX(AU|AG|PD|PT)/.test(mk.id);
   const unit = metal
     ? `1,00 $ de cours = ${num(spec.contract, 0)} $ pour 1 lot`
@@ -735,7 +751,7 @@ function zoneCard(r, i) {
 
 function render(fresh) {
   const spec = styleById(styleId);
-  const plans = reports.map((r) => ({ r, plan: CT.coursePlan(r, spec) })).filter((x) => x.plan);
+  const plans = reports.map((r) => ({ r, plan: r.prise || alertPlan(r) })).filter((x) => x.plan);
   plans.sort((a, b) => winPct(b.r) - winPct(a.r));
   const rest = reports.filter((r) => !plans.some((p) => p.r.id === r.id));
   const grid = $("#grid");
@@ -763,10 +779,15 @@ function render(fresh) {
 }
 
 function paintChrome() {
-  $("#styles").innerHTML = STYLES.map((s) => `<button type="button" aria-pressed="${styleId === s.id}" data-style="${s.id}">${esc(s.label)}<span class="buf">${esc(s.tf)}</span></button>`).join("");
+  const styles = $("#styles");
+  if (styles) styles.innerHTML = STYLES.map((s) => `<button type="button" aria-pressed="${styleId === s.id}" data-style="${s.id}">${esc(s.label)}<span class="buf">${esc(s.tf)}</span></button>`).join("");
   $("#families").innerHTML = FAMILIES.map((f) => `<button type="button" aria-pressed="${family === f}" data-family="${esc(f)}">${esc(f)}</button>`).join("");
   const stack = $("#stack");
-  if (stack) stack.textContent = styleById(styleId).stack;
+  if (stack) stack.textContent = styleId === "scalping"
+    ? "M5. On entre seulement si le prix touche une zone et que la bougie repart."
+    : styleId === "swing"
+      ? "H4. Même règle. La semaine bloque seulement si elle va dans l'autre sens."
+      : "H1. Même règle. Le H4 bloque seulement s'il va dans l'autre sens.";
 }
 
 async function scan() {
@@ -788,16 +809,58 @@ async function scan() {
   const list = MARKETS.filter((m) => m.aka === family);
   $("#status").textContent = `Lecture des prix : 0 sur ${list.length}`;
   const out = [];
-  for (let i = 0; i < list.length; i += 3) {
+  for (let i = 0; i < list.length; i += 2) {
     if (token !== gen) return;
-    const batch = list.slice(i, i + 3);
+    const batch = list.slice(i, i + 2);
     await Promise.all(batch.map(async (mk, k) => {
       const idx = i + k;
       try {
-        const bars = await fetchOHLC(mk.id, spec.step);
-        const row = evaluate(mk, bars, Date.now() / 1000, spec, manual);
-        row.bars = bars;
-        out[idx] = row;
+        const now = Date.now() / 1000;
+        const steps = styleId === "scalping" ? [14400, 900, 300, 60] : styleId === "swing" ? [86400, 14400] : [14400, 3600, 900];
+        const loaded = [];
+        for (const step of steps) loaded.push(await fetchOHLC(mk.id, step));
+        let shown = null;
+        let prise = null;
+        if (styleId === "scalping") {
+          const [bars4, bars15, bars5, bars1] = loaded;
+          const m5 = evaluate(mk, bars5, now, Object.assign({}, spec, { step: 300, tf: "M5" }), manual);
+          const m1 = evaluate(mk, bars1, now, Object.assign({}, spec, { step: 60, tf: "M1" }), manual);
+          let prise = null;
+          if (typeof CT.zoneReaction === "function") {
+            const reac = CT.zoneReaction(m5);
+            const h4 = typeof CT.senseOf === "function" ? CT.senseOf(bars4) : 0;
+            if (reac && !(h4 && h4 !== reac.dir)) prise = reac;
+          }
+          m5.bars = bars5;
+          m5.prise = prise;
+          shown = m5;
+        } else if (styleId === "day") {
+          const [bars4, bars1, bars15] = loaded;
+          const top = evaluate(mk, bars4, now, styleById("swing"), manual);
+          const mid = evaluate(mk, bars1, now, styleById("day"), manual);
+          const low = evaluate(mk, bars15, now, styleById("scalping"), manual);
+          const h4s = typeof CT.senseOf === "function" ? CT.senseOf(bars4) : 0;
+          const reac = typeof CT.zoneReaction === "function" ? CT.zoneReaction(mid) : null;
+          if (reac && !(h4s && h4s !== reac.dir)) prise = reac;
+          mid.bars = bars1;
+          mid.prise = prise;
+          shown = mid;
+        } else {
+          const [dailyBars, bars4] = loaded;
+          const weeklyBars = CT.groupCandles(dailyBars, 5);
+          const h4 = evaluate(mk, bars4, now, spec, manual);
+          const last = weeklyBars[weeklyBars.length - 1];
+          const weekly = Object.assign({}, h4, { series: weeklyBars, candles: weeklyBars, price: last ? last.c : h4.price, zones: [], state: "avis" });
+          if (typeof CT.zoneReaction === "function") {
+            const reac = CT.zoneReaction(h4);
+            const weeklySense = typeof CT.senseOf === "function" ? CT.senseOf(weeklyBars) : 0;
+            if (reac && !(weeklySense && weeklySense !== reac.dir)) prise = reac;
+          }
+          h4.bars = bars4;
+          h4.prise = prise;
+          shown = h4;
+        }
+        out[idx] = shown;
       }
       catch (e) { out[idx] = evaluate(mk, null, Date.now() / 1000, spec, manual); }
     }));
@@ -814,6 +877,121 @@ async function scan() {
   $("#status").textContent = failed === list.length ? "Aucun prix reçu. Deriv ne répond pas." : `Prix Deriv à ${hm(scannedAt)}, ${family}, en ${spec.tf}.`;
   render(true);
   alertLive();
+  loadOuvert();
+}
+
+function frNum(raw) {
+  if (!raw) return NaN;
+  return +String(raw).replace(/[^\d,.-]/g, "").replace(",", ".");
+}
+
+function parseAlert(j) {
+  const title = j.title || "";
+  const msg = j.message || "";
+  const end = /^(SL|TP|Profit|80 %|Entr)/.test(title) || /position est finie|objectif est touché/.test(msg);
+  if (end) {
+    const name = title.replace(/^(SL|TP|Profit|80 %|Entr\S*)\s+/, "").trim();
+    return { end: true, name, time: j.time || 0 };
+  }
+  if (!/^(BUY|SELL)\b/.test(title)) return null;
+  const suivi = msg.split("\n").find((line) => line.startsWith("SUIVI "));
+  let id = "";
+  let dir = title.startsWith("SELL") ? -1 : 1;
+  let entry = NaN;
+  let sl = NaN;
+  let tp = NaN;
+  let tf = "";
+  if (suivi) {
+    const p = suivi.split(" ");
+    id = p[1] || "";
+    tf = p[2] || "";
+    dir = +p[3] || dir;
+    entry = +p[4];
+    sl = +p[5];
+    tp = +p[6];
+  } else {
+    entry = frNum((msg.match(/Entrée\s+([^\n(]+)/) || [])[1]);
+    sl = frNum((msg.match(/\nSL\s+([^\n(]+)/) || [])[1]);
+    tp = frNum((msg.match(/\n(?:TP|Sortie)\s+([^\n(]+)/) || [])[1]);
+    const name = title.replace(/^(BUY|SELL)\s+\S+\s+\d+\s*%\s+/, "").trim();
+    const mk = MARKETS.find((m) => m.name === name);
+    id = mk ? mk.id : "";
+  }
+  if (!id || !(entry > 0) || !(sl > 0) || !(tp > 0)) return null;
+  return { end: false, id, dir, entry, sl, tp, tf, time: j.time || 0, title };
+}
+
+async function loadOuvert() {
+  const box = $("#ouvertGrid");
+  if (!box) return;
+  let rows = [];
+  try {
+    const since = Math.floor(Date.now() / 1000) - 36 * 3600;
+    const res = await fetch(`https://ntfy.sh/catrade-a8e3f19c4d/json?poll=1&since=${since}`, { cache: "no-store" });
+    if (res.ok) {
+      rows = (await res.text()).split("\n").map((line) => {
+        try { return JSON.parse(line); } catch (e) { return null; }
+      }).filter((j) => j && j.message);
+    }
+  } catch (e) {}
+  const open = new Map();
+  const closed = new Map();
+  for (const j of rows) {
+    const row = parseAlert(j);
+    if (!row) continue;
+    if (row.end) {
+      const mk = MARKETS.find((m) => m.name === row.name);
+      if (mk) closed.set(mk.id, row.time);
+      continue;
+    }
+    const gone = closed.get(row.id) || 0;
+    if (row.time >= gone) open.set(row.id, row);
+  }
+  for (const [id, row] of open) {
+    if ((closed.get(id) || 0) > row.time) open.delete(id);
+  }
+  const list = [...open.values()].sort((a, b) => b.time - a.time);
+  openById = open;
+  const latest = list[0];
+  if (latest && focusedAlert !== latest.id + ":" + latest.time) {
+    const mk = MARKETS.find((m) => m.id === latest.id);
+    const wantStyle = latest.tf === "m5" ? "scalping" : latest.tf === "h4" ? "swing" : latest.tf === "h1" ? "day" : styleId;
+    const wantFamily = mk && mk.aka ? mk.aka : family;
+    if (mk && (family !== wantFamily || styleId !== wantStyle)) {
+      focusedAlert = latest.id + ":" + latest.time;
+      family = wantFamily;
+      styleId = wantStyle;
+      store.set("ct.family", family);
+      store.set("ct.style", styleId);
+      paintChrome();
+      scan();
+      return;
+    }
+    focusedAlert = latest.id + ":" + latest.time;
+  }
+  if (reports.length) render(false);
+  const shown = latest && document.getElementById("m-" + latest.id);
+  if (shown) shown.scrollIntoView({ block: "start" });
+  if (!list.length) {
+    box.innerHTML = `<p class="subcall">Aucune position notifiée encore ouverte.</p>`;
+    return;
+  }
+  box.innerHTML = list.map((row) => {
+    const mk = MARKETS.find((m) => m.id === row.id);
+    const name = mk ? mk.name : row.id;
+    const dp = mk ? mk.dp : 2;
+    const sell = row.dir < 0;
+    const when = new Date(row.time * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" });
+    return `<article class="card glass" id="alerte-${esc(row.id)}">
+      <div class="head"><div><p class="name">${esc(name)}</p><div class="px">${when}</div></div></div>
+      <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="kind">${esc(row.title || "")}</span></div>
+      <dl class="lv">
+        <div><dt>Entrée</dt><dd>${fmt(row.entry, dp)}</dd></div>
+        <div><dt>SL</dt><dd class="sl">${fmt(row.sl, dp)}</dd></div>
+        <div><dt>TP</dt><dd class="tp">${fmt(row.tp, dp)}</dd></div>
+      </dl>
+    </article>`;
+  }).join("");
 }
 
 function pctText(r) {
@@ -983,25 +1161,25 @@ async function alertLive() {
   } catch (e) {}
   let changed = false;
   for (const r of reports) {
-    const plan = CT.coursePlan(r, spec);
+    const plan = r.prise || null;
     if (!plan) continue;
-    const key = `${plan.kind}:${r.id}:${styleId}:${plan.key}`;
+    const mk = MARKETS.find((m) => m.id === r.id);
+    if (!mk) continue;
+    const token = styleId === "scalping" ? "m5" : styleId === "swing" ? "h4" : "h1";
+    const where = styleId === "scalping" ? "Rejet en M5. Sortie à la zone devant." : styleId === "day" ? "Rejet en H1. Sortie à la zone devant." : "Rejet en H4. Sortie à la zone devant.";
+    const key = `${plan.kind}:${r.id}:${token}:${plan.key}`;
     if (seen[key]) continue;
     seen[key] = Date.now();
     changed = true;
-    const mk = MARKETS.find((m) => m.id === r.id);
     const sens = plan.dir < 0 ? "SELL" : "BUY";
-    const pct = pctText(r);
-    const title = `${sens} ${plan.kind} ${pct} ${mk.name}`;
-    const at = (q) => fmt(CT.gestionAt(plan, q), mk.dp);
+    const title = `${sens} ${plan.kind} ${mk.name}`;
     const body = [
-      sens, plan.kind, pct, `${spec.label} ${spec.tf}`, spec.stack,
+      sens, plan.kind, where,
       `Entrée ${fmt(plan.ref, mk.dp)}`,
       `SL ${fmt(plan.sl, mk.dp)}`,
       `TP ${fmt(plan.tp, mk.dp)}`,
       plan.note,
-      `SUIVI ${r.id} ${styleId} ${plan.dir} ${plan.ref} ${plan.sl} ${plan.tp} ${key}`,
-      "On tient jusqu'au cou. On ne rapproche pas le stop avant.",
+      `SUIVI ${r.id} ${token} ${plan.dir} ${plan.ref} ${plan.sl} ${plan.tp} ${key}`,
     ].join("\n");
     if (store.get("ct.notif", false) && "Notification" in window && Notification.permission === "granted") {
       try { new Notification(title, { body, tag: key }); } catch (e) {}
@@ -1094,7 +1272,9 @@ const notifOk = store.get("ct.notif", false) && "Notification" in window && Noti
 $("#notif").textContent = notifOk ? "Alertes actives" : "Activer les alertes";
 $("#notif").className = notifOk ? "btn on" : "btn";
 scan();
+loadOuvert();
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && !busy) scan();
+  if (document.visibilityState === "visible") loadOuvert();
 });
 setInterval(() => { if (document.visibilityState === "visible" && !busy) scan(); }, 90 * 1000);

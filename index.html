@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>CATRADE</title>
-<meta name="description" content="CATRADE propose l'entrée, le stop et la sortie d'un W, d'une tendance, d'un palier ou d'un breakout. L'ordre se place chez Deriv.">
+<meta name="description" content="CATRADE entre seulement quand le prix touche une zone tracée. L'ordre se place chez Deriv.">
 <meta name="theme-color" content="#0A1330">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -47,6 +47,10 @@
       <div class="names" id="names"></div>
     </details>
   </section>
+  <section class="panel glass" id="ouvert">
+    <h3 class="sec">Positions notifiées</h3>
+    <div class="grid" id="ouvertGrid"></div>
+  </section>
   <div class="grid" id="grid"></div>
   <details class="panel glass fold">
     <summary class="sec" id="othersTitle">Les autres</summary>
@@ -58,7 +62,7 @@
       <details class="fold" open>
         <summary>Quatre gestes</summary>
         <ol>
-          <li>Choisis le style. La lecture suit l'ordre du cours : grande unité, puis celle du milieu, puis la petite.</li>
+          <li>Une seule stratégie. On trace les zones. On attend que le prix les touche. La bougie qui repart donne le sens. Stop derrière la mèche. Sortie à la zone devant.</li>
           <li>Une fiche n'existe que dans le premier cinquième du chemin vers le cou. Tu places l'ordre limite sur la ligne, chez Deriv.</li>
           <li>Sortie au cou. On ne rapproche pas le stop.</li>
           <li>Une seule position, environ 2 % du capital. Rien n'est envoyé à un courtier.</li>
@@ -72,29 +76,27 @@
     <section class="panel glass">
       <h3 class="sec">Les règles</h3>
       <dl class="lex">
-        <dt>W</dt>
-        <dd>Premier cinquième du chemin, sortie au cou. On ne rapproche pas le stop.</dd>
-        <dt>Ce qu'on ne propose plus</dt>
-        <dd>Le breakout et le palier. Range, Basket et Daily ne sont plus dans les familles.</dd>
         <dt>Zones</dt>
-        <dd>Bandes séparées, là où le prix s'est déjà retourné. Plusieurs sommets au même niveau font une seule bande. S'il y en a trois trop proches, celle du milieu saute. La bleue n'apparaît que pour un W.</dd>
+        <dd>Le rose, large, c'est le directeur : les deux bords du mouvement, posés une fois. Le bleu, fin, c'est le standard : il n'apparaît que si une bougie vient de réagir sur un directeur. Sinon on attend.</dd>
+        <dt>Ce qu'on ne fait pas</dt>
+        <dd>Pas de W sans zone, pas de palier, pas de breakout hors d'une zone. Range, Basket et Daily ne sont plus dans les familles.</dd>
         <dt>On laisse</dt>
-        <dd>Prix déjà sorti du premier cinquième, sens contraire à la grande unité, unité swing.</dd>
+        <dd>Pas de zone touchée, bougie sans corps, ou sens contraire à la grande unité.</dd>
       </dl>
     </section>
   </div>
-  <footer class="note glass">CATRADE. Sortie au cou. Aucun ordre n'est passé d'ici. Icône sur l'iPhone : Safari, Partager, Sur l'écran d'accueil.</footer>
+  <footer class="note glass">CATRADE. Une zone, une réaction. Aucun ordre n'est passé d'ici. Icône sur l'iPhone : Safari, Partager, Sur l'écran d'accueil.</footer>
   <div class="alertbox glass">
     <div>
-      <p>Sortie au cou. On ne rapproche pas le stop.</p>
+      <p>Zone touchée, puis la bougie décide. Aucun ordre n'est passé d'ici.</p>
       <p>Dans l'appli ntfy, abonne-toi au sujet <b class="topic" id="topic">catrade-a8e3f19c4d</b>.</p>
     </div>
     <button class="btn" id="copyTopic" type="button">Copier le sujet</button>
     <button class="btn" id="notif" type="button">Alerter dans cette page</button>
   </div>
 </div>
-<script src="engine.js?v=84"></script>
-<script src="app.js?v=84"></script>
+<script src="engine.js?v=110"></script>
+<script src="app.js?v=110"></script>
 <script>
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
 </script>

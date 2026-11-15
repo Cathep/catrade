@@ -23,7 +23,9 @@ var CT = (() => {
   __export(engine_exports, {
     MARKETS: () => MARKETS,
     STYLES: () => STYLES,
+    alignedPlan: () => alignedPlan,
     breakoutOf: () => breakoutOf,
+    candleDecided: () => candleDecided,
     collectBars: () => collectBars,
     collectW: () => collectW,
     coursePlan: () => coursePlan,
@@ -31,10 +33,13 @@ var CT = (() => {
     evaluate: () => evaluate,
     fxBlocked: () => fxBlocked,
     gestionAt: () => gestionAt,
+    groupCandles: () => groupCandles,
     levelBeyond: () => levelBeyond,
     lotLoss: () => lotLoss,
     obliqueOn: () => obliqueOn,
+    palierPlan: () => palierPlan,
     patternPlan: () => patternPlan,
+    priorTrend: () => priorTrend,
     proposeLevels: () => proposeLevels,
     readAfter: () => readAfter,
     replayCourse: () => replayCourse,
@@ -42,6 +47,7 @@ var CT = (() => {
     simulateTrade: () => simulateTrade,
     styleById: () => styleById,
     traceZones: () => traceZones,
+    zoneReaction: () => zoneReaction,
     zonesOn: () => zonesOn
   });
   var STYLES = [
@@ -382,72 +388,17 @@ var CT = (() => {
       }
       if (top > bottom) zones.push({ role: "entree", top, bottom, from: pattern.i1, side: "w" });
     }
-    const winStart = Math.max(0, i - 160);
+    const prior = priorTrend(k.slice(0, i + 1));
+    if (!prior) return zones;
     const ranges = [];
     for (let j = Math.max(0, i - 40); j <= i; j++) ranges.push(k[j].h - k[j].l);
     ranges.sort((a, b) => a - b);
     const typical = ranges.length ? ranges[ranges.length >> 1] : 0;
-    const wing = 8;
-    if (!(typical > 0) || i < wing * 2) return zones;
-    const pts = [];
-    for (let j = Math.max(winStart, wing); j <= i - wing; j++) {
-      let high = true;
-      let low = true;
-      for (let n = j - wing; n <= j + wing; n++) {
-        if (n === j) continue;
-        if (k[n].h >= k[j].h) high = false;
-        if (k[n].l <= k[j].l) low = false;
-      }
-      if (high) pts.push({ p: j, ext: k[j].h, side: "h" });
-      if (low) pts.push({ p: j, ext: k[j].l, side: "l" });
+    if (!(typical > 0)) return zones;
+    const half = typical * 0.35;
+    for (const s of prior.shelves) {
+      zones.push({ role: "directeur", top: s.price + half, bottom: s.price - half, from: s.at, side: s.side });
     }
-    pts.sort((a, b) => a.ext - b.ext);
-    const shelves = [];
-    for (const pt of pts) {
-      const last = shelves[shelves.length - 1];
-      if (last && Math.abs(pt.ext - last.anchor) <= typical * 1.25) {
-        last.n += 1;
-        last.from = Math.min(last.from, pt.p);
-        if (pt.side === "h" && pt.ext > last.ext) {
-          last.ext = pt.ext;
-          last.side = "h";
-        } else if (pt.side === "l" && last.side === "l" && pt.ext < last.ext) last.ext = pt.ext;
-      } else shelves.push({ anchor: pt.ext, side: pt.side, ext: pt.ext, from: pt.p, n: 1 });
-    }
-    const half = Math.min(typical * 0.35, (() => {
-      let hi = -Infinity;
-      let lo = Infinity;
-      for (let j = Math.max(0, i - 119); j <= i; j++) {
-        hi = Math.max(hi, k[j].h);
-        lo = Math.min(lo, k[j].l);
-      }
-      return (hi - lo) * 0.04;
-    })());
-    let drafts = shelves.filter((s) => s.n >= 2).map((s) => ({
-      role: "directeur",
-      top: s.side === "h" ? s.ext : s.ext + half * 2,
-      bottom: s.side === "h" ? s.ext - half * 2 : s.ext,
-      from: s.from,
-      side: s.side,
-      n: s.n
-    })).sort((a, b) => (a.top + a.bottom) / 2 - (b.top + b.bottom) / 2);
-    let changed = drafts.slice().sort((a, b) => a.bottom - b.bottom);
-    const groups = [];
-    for (const d of changed) {
-      const g = groups[groups.length - 1];
-      const prev = g?.[g.length - 1];
-      const close = prev && d.bottom - prev.top < (prev.top - prev.bottom) * 3;
-      if (close) g.push(d);
-      else groups.push([d]);
-    }
-    let kept = [];
-    for (const g of groups) {
-      if (g.length >= 3) kept.push(g[0], g[g.length - 1]);
-      else if (g.length === 2) kept.push(g[0].n >= g[1].n ? g[0] : g[1]);
-      else kept.push(g[0]);
-    }
-    if (kept.length > 5) kept = kept.sort((a, b) => b.n - a.n).slice(0, 5);
-    zones.push(...kept.sort((a, b) => a.bottom - b.bottom).map((d) => ({ role: d.role, top: d.top, bottom: d.bottom, from: d.from, side: d.side })));
     return zones;
   }
   function zonesOn(k, style, pattern) {
@@ -582,8 +533,10 @@ var CT = (() => {
     if (!(span > 0)) return null;
     const progress = p.dir > 0 ? (r.price - second) / span : (second - r.price) / span;
     if (!(progress >= -0.05 && progress <= 0.2)) return null;
-    const pad = (r.atr || 0) * 0.12;
-    const sl = p.dir > 0 ? Math.min(p.ext1, p.ext2) - pad : Math.max(p.ext1, p.ext2) + pad;
+    const bars = (r.series?.length ? r.series : r.candles) ?? [];
+    const ranges = bars.slice(-40).map((b) => b.h - b.l).filter((x) => x > 0).sort((a, b) => a - b);
+    const room = Math.max((r.atr || 0) * 0.12, ranges.length >= 8 ? ranges[ranges.length >> 1] : 0);
+    const sl = p.dir > 0 ? Math.min(p.ext1, p.ext2) - room : Math.max(p.ext1, p.ext2) + room;
     if (p.dir > 0 ? r.price <= sl : r.price >= sl) return null;
     const dist = Math.abs(r.price - sl);
     if (!(dist > 0)) return null;
@@ -699,6 +652,14 @@ var CT = (() => {
     const impulse = Math.abs(second) >= Math.abs(first) ? second > 0 ? 1 : -1 : first > 0 ? 1 : -1;
     return impulse === structure ? structure : 0;
   }
+  function candleDecided(k, dir) {
+    if (!k || k.length < 2 || dir !== 1 && dir !== -1) return false;
+    const b = k[k.length - 2];
+    const range = b.h - b.l;
+    if (!(range > 0)) return false;
+    if (Math.abs(b.c - b.o) < range * 0.55) return false;
+    return dir > 0 ? b.c > b.o : b.c < b.o;
+  }
   function readAfter(k, zones, dir) {
     const majors = zones.filter((z) => z.role === "directeur" && z.top > z.bottom);
     const marks = [];
@@ -746,8 +707,8 @@ var CT = (() => {
     }
     return null;
   }
-  function stopHasRoom(r, dist, reward) {
-    if (!(dist > 0) || !(reward > dist) || reward > dist * 4) return false;
+  function stopHasRoom(r, dist, reward, cap = 6) {
+    if (!(dist > 0) || !(reward > dist) || cap > 0 && reward > dist * cap) return false;
     const bars = (r.series?.length ? r.series : r.candles) ?? [];
     const ranges = bars.slice(-40).map((b) => b.h - b.l).filter((x) => x > 0).sort((a, b) => a - b);
     if (ranges.length < 8) return true;
@@ -765,18 +726,28 @@ var CT = (() => {
     const body = Math.abs(bar.c - bar.o);
     if (!(range > 0) || body < range * 0.55) return null;
     if (dir !== 1 && dir !== -1) return null;
-    const next = (r.zones ?? []).filter((z) => z.role === "directeur" && z !== zone && (dir > 0 ? z.bottom > zone.top : z.top < zone.bottom)).sort((a, b) => dir > 0 ? a.bottom - b.bottom : b.top - a.top)[0];
-    if (!next) return null;
     const pad = (r.atr || range) * 0.12;
     let sl = dir > 0 ? Math.min(bar.l, zone.bottom) - pad : Math.max(bar.h, zone.top) + pad;
-    let tp = dir > 0 ? next.bottom : next.top;
-    let objective = tp;
+    const shaped = levelBeyond(k, dir, price);
     if (wide) {
-      const shaped = levelBeyond(k, dir, price);
       if (!shaped) return null;
       sl = dir > 0 ? shaped.sl - pad : shaped.sl + pad;
-      objective = shaped.objective;
+    }
+    const far = shaped && (dir > 0 ? shaped.objective > price : shaped.objective < price) ? shaped.objective : null;
+    const ahead2 = (r.zones ?? []).filter((z) => z.role === "directeur" && z.top > z.bottom && z !== zone && (dir > 0 ? z.bottom > price && (far == null || z.top < far) : z.top < price && (far == null || z.bottom > far))).sort((a, b) => dir > 0 ? a.bottom - b.bottom : b.top - a.top)[0];
+    const through = ahead2 ? dir > 0 ? bar.c > ahead2.top : bar.c < ahead2.bottom : true;
+    let tp;
+    let objective;
+    let held = false;
+    if (ahead2 && !through) {
+      tp = dir > 0 ? ahead2.bottom : ahead2.top;
+      objective = tp;
+      held = true;
+    } else if (far != null) {
+      objective = far;
       tp = shyOf(price, objective);
+    } else {
+      return null;
     }
     if (dir > 0 ? !(price > sl && price < tp) : !(price < sl && price > tp)) return null;
     const dist = Math.abs(price - sl);
@@ -793,37 +764,305 @@ var CT = (() => {
       reward,
       step: 1,
       key: `c:${bar.t}:${zone.bottom.toFixed(4)}:${dir}`,
-      note: wide ? "H4. Stop derri\xE8re le sommet ou le creux. TP un peu avant l'autre extr\xEAme." : "Hausse et baisse ne se devinent pas sur la zone. Les deux r\xE8gles sont d'accord, puis le prix rejette le niveau."
+      note: held ? wide ? "Stop derri\xE8re le sommet ou le creux. La zone devant n'a pas cass\xE9 : le TP s'arr\xEAte l\xE0." : "La zone devant n'a pas cass\xE9 : le TP s'arr\xEAte l\xE0. Le stop reste court, la petite unit\xE9 le r\xE9duit." : wide ? "La zone devant a cass\xE9, ou il n'y en a pas. Stop derri\xE8re le sommet ou le creux. TP un peu avant l'autre extr\xEAme." : "La zone devant a cass\xE9, ou il n'y en a pas. TP un peu avant l'autre extr\xEAme. Le stop reste court."
     };
+  }
+  function zoneReaction(r) {
+    return palierPlan(r);
   }
   function coursePlan(r, style) {
     if (r.price == null || r.state === "agite" || r.state === "ferme" || r.state === "erreur") return null;
     if (r.reasonCode === "LOCAL_AGAINST_CONTEXT") return null;
+    const palier = palierPlan(r);
+    if (palier) return palier;
     const simple = wSetup(r);
     const pattern = r.pattern;
     if (simple && pattern && style.id !== "swing") {
-      const extreme = pattern.dir > 0 ? Math.min(pattern.ext1, pattern.ext2) : Math.max(pattern.ext1, pattern.ext2);
-      const onLevel = (r.zones ?? []).some((z) => {
-        if (z.role !== "directeur" || !(z.top > z.bottom)) return false;
-        const h = z.top - z.bottom;
-        return extreme >= z.bottom - h && extreme <= z.top + h;
-      });
-      return {
-        kind: "W",
-        dir: simple.dir,
-        ref: simple.ref,
-        sl: simple.sl,
-        dist: simple.dist,
-        tp: simple.neck,
-        objective: simple.neck,
-        reward: Math.abs(simple.neck - simple.ref),
-        step: 0,
-        key: simple.key,
-        note: onLevel ? "Double V sur la zone. Sans ce W, le retour sur la zone ne se prend pas. Sortir au cou." : "Exploitation simple du W. Pas besoin qu'il soit sur une zone. Entr\xE9e au deuxi\xE8me creux, sortie au cou."
-      };
+      const reward = Math.abs(simple.neck - simple.ref);
+      if (stopHasRoom(r, simple.dist, reward, 0)) {
+        const extreme = pattern.dir > 0 ? Math.min(pattern.ext1, pattern.ext2) : Math.max(pattern.ext1, pattern.ext2);
+        const onLevel = (r.zones ?? []).some((z) => {
+          if (z.role !== "directeur" || !(z.top > z.bottom)) return false;
+          const h = z.top - z.bottom;
+          return extreme >= z.bottom - h && extreme <= z.top + h;
+        });
+        return {
+          kind: "W",
+          dir: simple.dir,
+          ref: simple.ref,
+          sl: simple.sl,
+          dist: simple.dist,
+          tp: simple.neck,
+          objective: simple.neck,
+          reward: Math.abs(simple.neck - simple.ref),
+          step: 0,
+          key: simple.key,
+          note: onLevel ? "Double V sur la zone. Sans ce W, le retour sur la zone ne se prend pas. Sortir au cou." : "Exploitation simple du W. Entr\xE9e au deuxi\xE8me creux. Le stop est au-del\xE0 d'une bougie, pour laisser passer le d\xE9bordement. Sortie au cou."
+        };
+      }
     }
     if (style.id === "swing") return confirmationSetup(r, true);
     return confirmationSetup(r);
+  }
+  function swingMarks(k, wing) {
+    const highs = [];
+    const lows = [];
+    for (let i = wing; i <= k.length - 1 - wing; i++) {
+      let hi = true;
+      let lo = true;
+      for (let j = i - wing; j <= i + wing; j++) {
+        if (j === i) continue;
+        if (k[j].h >= k[i].h) hi = false;
+        if (k[j].l <= k[i].l) lo = false;
+      }
+      if (hi) highs.push({ i, p: k[i].h });
+      if (lo) lows.push({ i, p: k[i].l });
+    }
+    return { highs, lows };
+  }
+  function medianRange(k, from, to) {
+    const ranges = [];
+    for (let i = Math.max(0, from); i <= Math.min(k.length - 1, to); i++) ranges.push(k[i].h - k[i].l);
+    ranges.sort((a, b) => a - b);
+    return ranges.length ? ranges[ranges.length >> 1] : 0;
+  }
+  function priorTrend(k) {
+    const wing = 4;
+    if (k.length < wing * 8) return null;
+    const typical = medianRange(k, Math.max(0, k.length - 40), k.length - 1);
+    if (!(typical > 0)) return null;
+    const raw = swingMarks(k, wing);
+    const from = Math.max(wing, k.length - 160);
+    const highs = raw.highs.filter((h) => h.i >= from);
+    const lows = raw.lows.filter((l) => l.i >= from);
+    if (!highs.length || !lows.length) return null;
+    const top = highs.reduce((a, b) => a.p >= b.p ? a : b);
+    const bot = lows.reduce((a, b) => a.p <= b.p ? a : b);
+    const span = top.p - bot.p;
+    if (!(span > typical * 6)) return null;
+    const last = k[k.length - 1].c;
+    const endedDown = bot.i > top.i && last > bot.p + span * 0.55;
+    const endedUp = top.i > bot.i && last < top.p - span * 0.55;
+    let dir;
+    let passage;
+    let origin;
+    let pool;
+    let side;
+    if (endedDown) {
+      dir = 1;
+      passage = bot;
+      origin = top;
+      side = "h";
+      pool = highs.filter((h) => h.i > top.i + wing && h.i < bot.i - wing);
+    } else if (endedUp) {
+      dir = -1;
+      passage = top;
+      origin = bot;
+      side = "l";
+      pool = lows.filter((l) => l.i > bot.i + wing && l.i < top.i - wing);
+    } else if (top.i >= bot.i) {
+      const before = highs.filter((h) => h.i < bot.i - wing);
+      if (!before.length) return null;
+      const start = before.reduce((a, b) => a.p >= b.p ? a : b);
+      dir = 1;
+      passage = bot;
+      origin = start;
+      side = "h";
+      pool = highs.filter((h) => h.i > start.i + wing && h.i < bot.i - wing);
+    } else {
+      const before = lows.filter((l) => l.i < top.i - wing);
+      if (!before.length) return null;
+      const start = before.reduce((a, b) => a.p <= b.p ? a : b);
+      dir = -1;
+      passage = top;
+      origin = start;
+      side = "l";
+      pool = lows.filter((l) => l.i > start.i + wing && l.i < top.i - wing);
+    }
+    if (pool.length < 1) return null;
+    const gap = Math.max(typical * 1.5, Math.abs(origin.p - passage.p) * 0.08);
+    const sorted = pool.slice().sort((a, b) => a.p - b.p);
+    const groups = [];
+    for (const s of sorted) {
+      const g = groups[groups.length - 1];
+      if (g && s.p - g[0].p <= gap) g.push(s);
+      else groups.push([s]);
+    }
+    let shelves = groups.map((g) => {
+      const prices = g.map((x) => x.p).sort((a, b) => a - b);
+      return { price: prices[prices.length >> 1], at: Math.min(...g.map((x) => x.i)), side };
+    });
+    shelves = shelves.filter((s) => Math.abs(s.price - passage.p) > gap && s.at < passage.i);
+    if (!shelves.length) return null;
+    shelves.sort((a, b) => b.at - a.at);
+    shelves = shelves.slice(0, 4);
+    return {
+      dir,
+      passage: passage.i,
+      passagePrice: passage.p,
+      objective: origin.p,
+      objectiveAt: origin.i,
+      shelves
+    };
+  }
+  function palierPlan(r) {
+    const k = r.series?.length ? r.series : r.candles ?? [];
+    if (k.length < 40 || r.price == null) return null;
+    if (r.state === "agite" || r.state === "ferme" || r.state === "erreur") return null;
+    const prior = priorTrend(k);
+    if (!prior) return null;
+    const price = r.price;
+    const span = Math.abs(prior.objective - prior.passagePrice);
+    if (!(span > 0)) return null;
+    const done = prior.dir > 0 ? (price - prior.passagePrice) / span : (prior.passagePrice - price) / span;
+    if (!(done >= 0 && done <= 0.3)) return null;
+    const { highs, lows } = swingMarks(k, 4);
+    const pulls = prior.dir > 0 ? lows.filter((l) => l.i > prior.passage && l.p > prior.passagePrice) : highs.filter((h) => h.i > prior.passage && h.p < prior.passagePrice);
+    if (pulls.length < 2) return null;
+    const family = prior.dir > 0 ? lows : highs;
+    const last = pulls[pulls.length - 1];
+    if (!family.length || family[family.length - 1].i !== last.i) return null;
+    const ranges = k.slice(-40).map((b) => b.h - b.l).filter((x) => x > 0).sort((a, b) => a - b);
+    const room = ranges.length >= 8 ? ranges[ranges.length >> 1] : r.atr || span * 0.02;
+    if (!(room > 0)) return null;
+    const shelf = prior.shelves.map((s) => ({ ...s, d: Math.abs(last.p - s.price) })).sort((a, b) => a.d - b.d)[0];
+    if (!shelf || shelf.d > room * 1.5) return null;
+    const mates = family.filter((s) => s.i <= last.i && last.i - s.i <= 16 && Math.abs(s.p - last.p) <= room * 1.5);
+    if (mates.length < 2) return null;
+    if (Math.abs(price - shelf.price) > span * 0.08) return null;
+    const extreme = prior.dir > 0 ? Math.min(...mates.map((m) => m.p)) : Math.max(...mates.map((m) => m.p));
+    const sl = prior.dir > 0 ? extreme - room : extreme + room;
+    if (prior.dir > 0 ? price <= sl : price >= sl) return null;
+    const tp = shyOf(price, prior.objective);
+    if (prior.dir > 0 ? !(tp > price) : !(tp < price)) return null;
+    const dist = Math.abs(price - sl);
+    const reward = Math.abs(tp - price);
+    if (!stopHasRoom(r, dist, reward, 0)) return null;
+    return {
+      kind: "PALIER",
+      dir: prior.dir,
+      ref: price,
+      sl,
+      dist,
+      tp,
+      objective: prior.objective,
+      reward,
+      step: pulls.length,
+      key: `palier:${k[prior.passage].t}:${prior.dir}:${shelf.price.toFixed(4)}`,
+      note: "Niveau prolong\xE9 depuis la tendance pr\xE9c\xE9dente. Le premier repli est laiss\xE9. Entr\xE9e au suivant, avant 30 %. Objectif un peu avant la fin de la tendance."
+    };
+  }
+  function pullbackEntry(k, dir, price) {
+    const wing = 3;
+    if (k.length < wing * 6) return null;
+    const { highs, lows } = swingMarks(k, wing);
+    if (dir > 0) {
+      for (let n = lows.length - 3; n >= 1; n--) {
+        const turn = lows[n];
+        if (!(lows[n - 1].p > turn.p && lows[n + 1].p > turn.p)) continue;
+        const pulls = lows.filter((l) => l.i > turn.i && l.p > turn.p);
+        if (pulls.length < 2) continue;
+        const last = lows[lows.length - 1];
+        const entry = pulls[pulls.length - 1];
+        if (last.i !== entry.i) continue;
+        const before = highs.filter((h) => h.i < turn.i && h.i > turn.i - 100);
+        if (!before.length) continue;
+        const origin = before.reduce((a, b) => a.p >= b.p ? a : b);
+        const span = origin.p - turn.p;
+        if (!(span > 0) || !(origin.p > price)) continue;
+        const done = (price - turn.p) / span;
+        if (!(done >= 0 && done <= 0.3)) continue;
+        if (!(price > entry.p) || Math.abs(price - entry.p) > span * 0.08) continue;
+        return { turn: turn.p, at: k[turn.i].t, extreme: entry.p, objective: origin.p, which: pulls.length };
+      }
+    } else {
+      for (let n = highs.length - 3; n >= 1; n--) {
+        const turn = highs[n];
+        if (!(highs[n - 1].p < turn.p && highs[n + 1].p < turn.p)) continue;
+        const pulls = highs.filter((h) => h.i > turn.i && h.p < turn.p);
+        if (pulls.length < 2) continue;
+        const last = highs[highs.length - 1];
+        const entry = pulls[pulls.length - 1];
+        if (last.i !== entry.i) continue;
+        const before = lows.filter((l) => l.i < turn.i && l.i > turn.i - 100);
+        if (!before.length) continue;
+        const origin = before.reduce((a, b) => a.p <= b.p ? a : b);
+        const span = turn.p - origin.p;
+        if (!(span > 0) || !(origin.p < price)) continue;
+        const done = (turn.p - price) / span;
+        if (!(done >= 0 && done <= 0.3)) continue;
+        if (!(price < entry.p) || Math.abs(price - entry.p) > span * 0.08) continue;
+        return { turn: turn.p, at: k[turn.i].t, extreme: entry.p, objective: origin.p, which: pulls.length };
+      }
+    }
+    return null;
+  }
+  function groupCandles(k, size) {
+    if (!(size > 1)) return k.slice();
+    const out = [];
+    const start = k.length % size;
+    for (let i = start; i + size <= k.length; i += size) {
+      const s = k.slice(i, i + size);
+      out.push({
+        t: s[0].t,
+        o: s[0].o,
+        h: Math.max(...s.map((c) => c.h)),
+        l: Math.min(...s.map((c) => c.l)),
+        c: s[s.length - 1].c
+      });
+    }
+    return out;
+  }
+  function alignedPlan(big, small, higher = null) {
+    if (big.price == null || small.price == null) return null;
+    if (big.state === "agite" || big.state === "ferme" || big.state === "erreur") return null;
+    if (small.state === "agite" || small.state === "ferme" || small.state === "erreur") return null;
+    const bk = big.series?.length ? big.series : big.candles ?? [];
+    const dir = senseOf(bk);
+    if (dir !== 1 && dir !== -1) return null;
+    if (higher && higher.length) {
+      const above = senseOf(higher);
+      if (above === 0 || above !== dir) return null;
+    }
+    const sk = small.series?.length ? small.series : small.candles ?? [];
+    if (senseOf(sk) !== dir) return null;
+    const price = small.price;
+    const pull = pullbackEntry(bk, dir, price);
+    if (!pull) return null;
+    const pad = (big.atr || 0) * 0.12;
+    const sl = dir > 0 ? pull.extreme - pad : pull.extreme + pad;
+    if (dir > 0 ? !(price > sl) : !(price < sl)) return null;
+    const far = pull.objective;
+    const ahead2 = (big.zones ?? []).filter((z) => z.role === "directeur" && z.top > z.bottom && (dir > 0 ? z.bottom > price && z.top < far : z.top < price && z.bottom > far)).sort((a, b) => dir > 0 ? a.bottom - b.bottom : b.top - a.top)[0];
+    const last = bk[bk.length - 1];
+    const through = ahead2 && last ? dir > 0 ? last.c > ahead2.top : last.c < ahead2.bottom : true;
+    let tp;
+    let held = false;
+    if (ahead2 && !through) {
+      tp = dir > 0 ? ahead2.bottom : ahead2.top;
+      held = true;
+    } else if (dir > 0 ? far > price : far < price) {
+      tp = shyOf(price, far);
+    } else {
+      return null;
+    }
+    if (dir > 0 ? !(price < tp) : !(price > tp)) return null;
+    const dist = Math.abs(price - sl);
+    const reward = Math.abs(tp - price);
+    if (!stopHasRoom(big, dist, reward, 0)) return null;
+    return {
+      kind: "TENDANCE",
+      dir,
+      ref: price,
+      sl,
+      dist,
+      tp,
+      objective: held ? tp : far,
+      reward,
+      step: pull.which,
+      key: `s:${pull.at}:${dir}`,
+      note: held ? "Exploitation simple. Le premier repli est laiss\xE9. Entr\xE9e \xE0 la fin du suivant, avant 30 %. La zone devant n'a pas cass\xE9 : le TP s'arr\xEAte l\xE0." : "Exploitation simple. Le premier repli est laiss\xE9. Entr\xE9e \xE0 la fin du suivant, avant 30 %. TP un peu avant l'objectif."
+    };
   }
   function gestionAt(plan, q) {
     return plan.ref + (plan.tp - plan.ref) * q;
@@ -1227,7 +1466,7 @@ var CT = (() => {
       verdict,
       buffer: manual ? dir * 2 : dir,
       reasonCode: manual ? "WM_MANUAL_REVIEW" : "CURRENT_CODE_SETUP_ACCEPTED",
-      reason: manual ? "Contexte autoris\xE9. Pas de W, tendance, palier ou breakout m\xFBr." : "Contexte autoris\xE9, motif retenu et niveaux coh\xE9rents selon ces r\xE8gles.",
+      reason: manual ? "Contexte autoris\xE9. Pas de r\xE9action sur une zone trac\xE9e." : "Contexte autoris\xE9, motif retenu et niveaux coh\xE9rents selon ces r\xE8gles.",
       pattern: aligned,
       opposed: !!other,
       notes,
