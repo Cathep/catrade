@@ -23,14 +23,13 @@ let styleId = store.get("ct.style", "day");
 if (styleId !== "scalping" && styleId !== "day" && styleId !== "swing") styleId = "day";
 let family = store.get("ct.family", "Volatility");
 let openById = new Map();
-let focusedAlert = "";
 const FAMILIES = [];
 for (const m of MARKETS) if (m.aka && !FAMILIES.includes(m.aka)) FAMILIES.push(m.aka);
 if (!FAMILIES.includes(family)) family = FAMILIES[0] || "Volatility";
 let manual = true;
 let reports = [];
 let busy = false;
-const BUILD = "110";
+const BUILD = "111";
 let scannedAt = 0;
 let choices = store.get("ct.choices", {});
 let simLot = store.get("ct.simLot", null);
@@ -952,24 +951,8 @@ async function loadOuvert() {
   }
   const list = [...open.values()].sort((a, b) => b.time - a.time);
   openById = open;
-  const latest = list[0];
-  if (latest && focusedAlert !== latest.id + ":" + latest.time) {
-    const mk = MARKETS.find((m) => m.id === latest.id);
-    const wantStyle = latest.tf === "m5" ? "scalping" : latest.tf === "h4" ? "swing" : latest.tf === "h1" ? "day" : styleId;
-    const wantFamily = mk && mk.aka ? mk.aka : family;
-    if (mk && (family !== wantFamily || styleId !== wantStyle)) {
-      focusedAlert = latest.id + ":" + latest.time;
-      family = wantFamily;
-      styleId = wantStyle;
-      store.set("ct.family", family);
-      store.set("ct.style", styleId);
-      paintChrome();
-      scan();
-      return;
-    }
-    focusedAlert = latest.id + ":" + latest.time;
-  }
   if (reports.length) render(false);
+  const latest = list[0];
   const shown = latest && document.getElementById("m-" + latest.id);
   if (shown) shown.scrollIntoView({ block: "start" });
   if (!list.length) {
