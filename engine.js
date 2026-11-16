@@ -895,8 +895,8 @@ var CT = (() => {
     const span = top.p - bot.p;
     if (!(span > typical * 6)) return null;
     const last = k[k.length - 1].c;
-    const endedDown = bot.i > top.i && last > bot.p + span * 0.55;
-    const endedUp = top.i > bot.i && last < top.p - span * 0.55;
+    const endedDown = bot.i > top.i && last > bot.p;
+    const endedUp = top.i > bot.i && last < top.p;
     let dir;
     let passage;
     let origin;
@@ -981,13 +981,18 @@ var CT = (() => {
     if (!(room > 0)) return null;
     const shelf = prior.shelves.map((s) => ({ ...s, d: Math.abs(last.p - s.price) })).sort((a, b) => a.d - b.d)[0];
     if (!shelf || shelf.d > room * 1.5) return null;
+    const bar = k[k.length - 1];
+    const rejected = prior.dir > 0 ? bar.l <= shelf.price + room && bar.c > shelf.price && bar.c > bar.o : bar.h >= shelf.price - room && bar.c < shelf.price && bar.c < bar.o;
+    if (!rejected) return null;
     const mates = family.filter((s) => s.i <= last.i && last.i - s.i <= 16 && Math.abs(s.p - last.p) <= room * 1.5);
     if (mates.length < 2) return null;
     if (Math.abs(price - shelf.price) > span * 0.08) return null;
     const extreme = prior.dir > 0 ? Math.min(...mates.map((m) => m.p)) : Math.max(...mates.map((m) => m.p));
-    const sl = prior.dir > 0 ? extreme - room : extreme + room;
+    const sl = prior.dir > 0 ? extreme - room * 2 : extreme + room * 2;
     if (prior.dir > 0 ? price <= sl : price >= sl) return null;
-    const tp = shyOf(price, prior.objective);
+    const ahead2 = prior.shelves.map((s) => s.price).filter((p) => prior.dir > 0 ? p > price + room : p < price - room).sort((a, b) => prior.dir > 0 ? a - b : b - a)[0];
+    if (ahead2 == null) return null;
+    const tp = shyOf(price, ahead2);
     if (prior.dir > 0 ? !(tp > price) : !(tp < price)) return null;
     const dist = Math.abs(price - sl);
     const reward = Math.abs(tp - price);
@@ -999,11 +1004,11 @@ var CT = (() => {
       sl,
       dist,
       tp,
-      objective: prior.objective,
+      objective: ahead2,
       reward,
       step: pulls.length,
       key: `palier:${k[prior.passage].t}:${prior.dir}:${shelf.price.toFixed(4)}`,
-      note: "Niveau prolong\xE9 depuis la tendance pr\xE9c\xE9dente. Le premier repli est laiss\xE9. Entr\xE9e au suivant, avant 30 %. Objectif un peu avant la fin de la tendance."
+      note: "Le prix a rejet\xE9 le niveau. Le premier repli est laiss\xE9. Sortie \xE0 la zone devant, pas au bout de la tendance."
     };
   }
   function pullbackEntry(k, dir, price) {
