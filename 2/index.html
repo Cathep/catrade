@@ -459,15 +459,23 @@ if (typeof document !== "undefined") (() => {
     }
   }
 
-  let derivWS = null, reqN = 1;
+  let derivWS = null, derivOpening = null, reqN = 1, scanGen = 0;
   const waiters = new Map();
+  const cache = new Map();
+  function dropSocket() {
+    for (const [id, done] of waiters) { waiters.delete(id); done({ error: { message: "annulé" } }); }
+    try { if (derivWS) derivWS.close(); } catch (e) {}
+    derivWS = null;
+    derivOpening = null;
+  }
   function openDeriv() {
     if (derivWS && derivWS.readyState === 1) return Promise.resolve(derivWS);
-    return new Promise((resolve, reject) => {
+    if (derivOpening) return derivOpening;
+    derivOpening = new Promise((resolve, reject) => {
       const ws = new WebSocket("wss://api.derivws.com/trading/v1/options/ws/public");
       const timer = setTimeout(() => { try { ws.close(); } catch (e) {} reject(new Error("délai")); }, 12000);
-      ws.onopen = () => { clearTimeout(timer); derivWS = ws; resolve(ws); };
-      ws.onerror = () => { clearTimeout(timer); reject(new Error("websocket")); };
+      ws.onopen = () => { clearTimeout(timer); derivWS = ws; derivOpening = null; resolve(ws); };
+      ws.onerror = () => { clearTimeout(timer); derivOpening = null; reject(new Error("websocket")); };
       ws.onclose = () => { if (derivWS === ws) derivWS = null; };
       ws.onmessage = ev => {
         let j; try { j = JSON.parse(ev.data); } catch (e) { return; }
@@ -475,33 +483,34 @@ if (typeof document !== "undefined") (() => {
         if (id && waiters.has(id)) { const done = waiters.get(id); waiters.delete(id); done(j); }
       };
     });
+    return derivOpening;
   }
-  let derivChain = Promise.resolve();
   function fetchDeriv(symbol) {
+    const gen = scanGen;
     const run = async () => {
-      for (let attempt = 1; attempt <= 4; attempt++) {
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        if (gen !== scanGen) throw new Error("annulé");
         try {
           const ws = await openDeriv();
           const req_id = reqN++;
           const j = await new Promise((resolve, reject) => {
-            const timer = setTimeout(() => { waiters.delete(req_id); reject(new Error("délai")); }, 15000);
+            const timer = setTimeout(() => { waiters.delete(req_id); reject(new Error("délai")); }, 12000);
             waiters.set(req_id, x => { clearTimeout(timer); resolve(x); });
-            ws.send(JSON.stringify({ ticks_history: symbol, adjust_start_time: 1, count: 500, end: "latest", start: 1, style: "candles", granularity: 14400, req_id }));
+            ws.send(JSON.stringify({ ticks_history: symbol, adjust_start_time: 1, count: 400, end: "latest", start: 1, style: "candles", granularity: 14400, req_id }));
           });
           if (j.error) throw new Error(j.error.code || j.error.message || "Deriv");
           if (!j.candles || !j.candles.length) throw new Error("vide");
           return j.candles.map(c => ({ t: +c.epoch, o: +c.open, h: +c.high, l: +c.low, c: +c.close }));
         } catch (e) {
+          if (gen !== scanGen || /annul/i.test(String(e.message))) throw new Error("annulé");
           try { if (derivWS) derivWS.close(); } catch (err) {}
           derivWS = null;
-          if (attempt >= 4) throw e;
-          await sleep(/Rate|rate|limit/i.test(String(e.message)) ? 8000 : 1200);
+          if (attempt >= 3) throw e;
+          await sleep(/Rate|rate|limit/i.test(String(e.message)) ? 4000 : 600);
         }
       }
     };
-    const job = derivChain.then(run, run);
-    derivChain = job.then(() => sleep(280), () => sleep(800));
-    return job;
+    return run();
   }
 
   /* Une proposition par marché : le signal confirmé s'il existe, sinon la tendance */
@@ -595,6 +604,13 @@ if (typeof document !== "undefined") (() => {
   function render(fresh) {
     const shown = famFilter === "Tout" ? reports : reports.filter(r => MK[r.id] && MK[r.id].fam === famFilter);
     const items = shown.map(r => ({ r, p: proposal(r) }));
+    if (!reports.length) {
+      $("#headline").textContent = famFilter === "Tout" ? "Choisis une famille." : "Lecture…";
+      $("#sub").textContent = "Seule la famille choisie est lue. Tout charge les 68 marchés, c'est long.";
+      $("#grid").innerHTML = "";
+      $("#others").innerHTML = `<li><span>${famFilter === "Tout" ? "Choisis Volatility, Boom, Crash, Jump, Step ou une autre famille." : "Lecture en cours."}</span></li>`;
+      return;
+    }
     const ok = items.filter(x => eligible(x.p)).sort((a, b) => (b.p.kind === "signal") - (a.p.kind === "signal") || winPct(b.p.rec) - winPct(a.p.rec));
     const rest = items.filter(x => !eligible(x.p));
     const grid = $("#grid");
@@ -649,26 +665,54 @@ if (typeof document !== "undefined") (() => {
   }
 
   async function scan() {
-    if (busy) return; busy = true;
+    const gen = ++scanGen;
+    dropSocket();
     const btn = $("#refresh"), st = $("#status");
-    btn.disabled = true; btn.textContent = "Lecture…"; st.textContent = `Lecture des prix : 0 sur ${MARKETS.length}`;
-    const out = new Array(MARKETS.length); let next = 0, done = 0;
-    const worker = async () => { while (next < MARKETS.length) { const i = next++, mk = MARKETS[i];
-      try {
-        const bars = mk.src === "deriv" ? await fetchDeriv(mk.id) : await fetchOHLC(mk.id);
-        out[i] = Engine.evaluate(mk, bars, Date.now() / 1000);
-      } catch (e) { out[i] = { id: mk.id, cls: mk.cls, state: "erreur", why: "indispo" }; }
-      st.textContent = `Lecture des prix : ${++done} sur ${MARKETS.length}`; } };
-    await Promise.all([worker(), worker()]);
+    const list = MARKETS.filter(m => famFilter === "Tout" || m.fam === famFilter);
+    if (!list.length) return;
+    busy = true;
+    btn.disabled = true; btn.textContent = "Lecture…";
+    st.textContent = `Lecture de ${famFilter} : 0 sur ${list.length}`;
+    const now = Date.now();
+    const out = [];
+    let next = 0, done = 0;
+    const worker = async () => {
+      while (gen === scanGen && next < list.length) {
+        const mk = list[next++];
+        const hit = cache.get(mk.id);
+        let row;
+        if (hit && now - hit.at < 10 * 60 * 1000) row = hit.report;
+        else {
+          try {
+            const bars = mk.src === "deriv" ? await fetchDeriv(mk.id) : await fetchOHLC(mk.id);
+            if (gen !== scanGen) return;
+            row = Engine.evaluate(mk, bars, Date.now() / 1000);
+          } catch (e) {
+            if (gen !== scanGen || /annul/i.test(String(e.message))) return;
+            row = { id: mk.id, cls: mk.cls, state: "erreur", why: "indispo" };
+          }
+          cache.set(mk.id, { at: Date.now(), report: row });
+        }
+        if (gen !== scanGen) return;
+        out.push(row);
+        done++;
+        reports = out.slice();
+        scannedAt = Date.now();
+        render(true);
+        st.textContent = `Lecture de ${famFilter} : ${done} sur ${list.length}`;
+      }
+    };
+    const n = Math.min(3, list.length);
+    await Promise.all(Array.from({ length: n }, worker));
+    if (gen !== scanGen) return;
     busy = false; btn.disabled = false; btn.textContent = "Actualiser";
-    reports = out; scannedAt = Date.now();
-    render(true); notifyNew();
-    st.textContent = reports.every(r => r.state === "erreur") ? "Aucun prix reçu." : `Prix lus à ${hm(scannedAt)}. Forex, or et cryptos sur Kraken. Indices sur Deriv. Actualisez juste avant d'entrer.`;
+    st.textContent = reports.every(r => r.state === "erreur") ? "Aucun prix reçu pour cette famille." : `${famFilter} lu à ${hm(scannedAt)}.`;
+    notifyNew();
   }
 
   document.addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
-    if (b.dataset.fam) { famFilter = b.dataset.fam; store.set("c2.fam", famFilter); paintFams(); render(false); }
+    if (b.dataset.fam) { famFilter = b.dataset.fam; store.set("c2.fam", famFilter); paintFams(); reports = []; render(false); scan(); }
     else if (b.id === "refresh") scan();
     else if (b.dataset.take) choose(b.dataset.take, "pris");
     else if (b.dataset.skip) choose(b.dataset.skip, "passe");
@@ -682,10 +726,11 @@ if (typeof document !== "undefined") (() => {
       });
     }
   });
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - scannedAt > 5 * 60000) scan(); });
-  setInterval(() => { if (!busy) scan(); }, 15 * 60000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && famFilter !== "Tout" && Date.now() - scannedAt > 5 * 60000) scan(); });
+  setInterval(() => { if (famFilter !== "Tout" && scanGen) scan(); }, 15 * 60000);
   $("#notifPage").setAttribute("aria-pressed", String(store.get("bt.notif", false) && "Notification" in window && Notification.permission === "granted"));
-  paintFams(); tick(); setInterval(tick, 30000); scan();
+  paintFams(); tick(); setInterval(tick, 30000);
+  if (famFilter === "Tout") { render(false); } else scan();
 })();
 if (typeof module !== "undefined") module.exports = Engine;
 </script>
