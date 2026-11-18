@@ -177,8 +177,9 @@ footer{padding:1rem 1.125rem;color:var(--muted);font-size:.875rem}
 
     <section class="panel glass" aria-labelledby="h-notif">
       <h3 class="sec" id="h-notif">Être prévenu d'un signal</h3>
-      <p class="muted small">Une alerte du navigateur à chaque signal confirmé, tant que cette page reste ouverte.</p>
-      <div class="row"><button class="btn" type="button" id="notifPage" aria-pressed="false">Alerter dans ce navigateur</button></div>
+      <p class="muted small">Dans l'application ntfy, appuie sur + et colle ce sujet :</p>
+      <p><b class="topic" id="topicText">catrade2-a8e3f19c4d</b></p>
+      <div class="row"><button class="btn" type="button" id="copyTopic">Copier le sujet</button><button class="btn" type="button" id="notifPage" aria-pressed="false">Alerter dans ce navigateur</button></div>
       <p class="muted small" id="notifMsg" role="status"></p>
       <details>
         <summary>Comment lire une fiche</summary>
@@ -425,7 +426,7 @@ if (typeof document !== "undefined") (() => {
     { id: "OTC_DJI", sym: "Wall Street 30", name: "Wall Street 30", fam: "Indice", src: "deriv", cls: "synth", dp: 2, cost: 0.00008 },
   ];
   const MK = Object.fromEntries(MARKETS.map(m => [m.id, m]));
-  const TOPIC = "bero-trade-c4d2d63df1", MIN_WIN = 50, MIN_N = 8;
+  const TOPIC = "catrade2-a8e3f19c4d", MIN_WIN = 50, MIN_N = 8;
   const $ = s => document.querySelector(s);
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -654,12 +655,19 @@ if (typeof document !== "undefined") (() => {
   }
 
   function notifyNew() {
-    if (!store.get("bt.notif", false) || !("Notification" in window) || Notification.permission !== "granted") return;
     const seen = store.get("bt.seen", {});
+    const browser = store.get("bt.notif", false) && "Notification" in window && Notification.permission === "granted";
     for (const r of Engine.rank(reports)) {
       const key = r.id + ":" + r.plan.firedAt; if (seen[key]) continue; seen[key] = 1;
       const mk = MK[r.id], p = r.plan;
-      try { new Notification(`CATRADE 2 : ${p.dir < 0 ? "vendre" : "acheter"} ${mk.sym}`, { body: `Entrée ${fmt(p.entry, mk.dp)}, SL ${fmt(p.sl, mk.dp)}, TP ${fmt(p.tp, mk.dp)}`, icon: "icon-192.png", tag: key }); } catch (e) {}
+      const title = `CATRADE 2 : ${p.dir < 0 ? "vendre" : "acheter"} ${mk.name}`;
+      const body = `Entrée ${fmt(p.entry, mk.dp)}\nSL ${fmt(p.sl, mk.dp)}\nTP ${fmt(p.tp, mk.dp)}`;
+      fetch("https://ntfy.sh/" + TOPIC, {
+        method: "POST",
+        headers: { Title: title, Priority: "5", Tags: "bell", Click: "https://cathep.github.io/catrade/2/" },
+        body,
+      }).catch(() => {});
+      if (browser) { try { new Notification(title, { body, icon: "icon-192.png", tag: key }); } catch (e) {} }
     }
     store.set("bt.seen", seen);
   }
@@ -717,7 +725,12 @@ if (typeof document !== "undefined") (() => {
     else if (b.dataset.take) choose(b.dataset.take, "pris");
     else if (b.dataset.skip) choose(b.dataset.skip, "passe");
     else if (b.dataset.undo) choose(b.dataset.undo, null);
-      else if (b.id === "notifPage") {
+    else if (b.id === "copyTopic") {
+      const done = () => { $("#notifMsg").textContent = "Sujet copié. Dans ntfy, appuie sur + et colle-le."; };
+      const text = TOPIC;
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, () => { $("#notifMsg").textContent = "Copie à la main : " + text; });
+      else $("#notifMsg").textContent = "Copie à la main : " + text;
+    } else if (b.id === "notifPage") {
       if (!("Notification" in window)) { $("#notifMsg").textContent = "Ce navigateur ne permet pas les alertes. Utilisez ntfy."; return; }
       Notification.requestPermission().then(perm => {
         const okp = perm === "granted"; store.set("bt.notif", okp); b.setAttribute("aria-pressed", String(okp));
