@@ -184,7 +184,7 @@ footer{padding:1rem 1.125rem;color:var(--muted);font-size:.875rem}
       <details>
         <summary>Comment lire une fiche</summary>
         <ol class="small">
-          <li><b>Signal confirmé</b> : les règles complètes sont remplies (tendance, repli puis reprise). <b>Tendance</b> : le marché va dans un sens, mais sans point d'entrée net. C'est plus risqué.</li>
+          <li><b>Signal confirmé</b> : le prix est revenu sur la moyenne et a refermé dans le sens. L'entrée est le prix de cette bougie, le stop est au-delà du repli. <b>Tendance</b> : le sens seulement. Pas d'entrée, pas de stop, pas d'objectif.</li>
           <li>Le pourcentage est la part de trades gagnants de ce type sur ce marché, sur les ~80 derniers jours.</li>
           <li>L'objectif est à 0,75 fois la distance du stop. Il faut donc gagner au moins 57 % des trades pour être rentable. Sous ce seuil, le marché gagne souvent mais perd en moyenne.</li>
           <li>Le trade se ferme au plus tard au bout de 4 jours.</li>
@@ -333,10 +333,10 @@ const Engine = (() => {
       else if (prog > 0.25) rep.why = "parti";
       else if (prog < -0.3) rep.why = "fragile";
       else {
-        const dist = Math.abs(rep.price - s.sl);
+        const dist = s.dist;
         rep.state = "signal"; rep.why = null;
-        rep.plan = { dir: s.dir, kind: s.kind, entry: rep.price, sl: s.sl, tp: rep.price + s.dir * CFG.rr * dist, dist, age, prog,
-                     firedAt: s.t + STEP, until: s.t + STEP + CFG.maxBars * STEP, costR: mk.cost * rep.price / dist };
+        rep.plan = { dir: s.dir, kind: s.kind, entry: s.entry, sl: s.sl, tp: s.tp, dist, age, prog,
+                     firedAt: s.t + STEP, until: s.t + STEP + CFG.maxBars * STEP, costR: mk.cost * s.entry / dist };
         rep.checks = { vol: rep.vr >= 0.5 && rep.vr <= 1.5, frais: age === 0 && Math.abs(prog) <= 0.2, bilan: rep.record.n >= 8 && rep.record.net > 0 };
         rep.score = (rep.checks.vol ? 1 : 0) + (rep.checks.frais ? 1 : 0) + (rep.checks.bilan ? 1 : 0);
       }
@@ -551,26 +551,38 @@ if (typeof document !== "undefined") (() => {
   const keyOf = (r, p) => r.id + ":" + (p.kind === "signal" ? p.plan.firedAt : Math.floor(scannedAt / 1000 / Engine.STEP));
 
   function card(r, p, i) {
-    const mk = MK[r.id], pl = p.plan, sell = pl.dir < 0, w = winPct(p.rec), [rk, rl] = riskOf(r, p), loss = lotLoss(r, pl.dist);
-    const key = keyOf(r, p), ch = choices[key] && choices[key].c;
-    const avg = p.rec.avg, avgTxt = (avg >= 0 ? "+" : "−") + num(Math.abs(avg), 2) + " R";
+    const mk = MK[r.id], pl = p.plan, sell = pl.dir < 0, w = winPct(p.rec);
     const ringc = w >= BE ? "var(--buy)" : "var(--warn)";
-    const lossTxt = loss != null ? `${num(loss, 2)} $ avec 0,01 lot` : `${distTxt(mk, pl.dist)} par unité`;
-    return `<article class="card glass" data-dir="${pl.dir}" data-choice="${ch || ""}" style="--i:${i}">
-      <div class="head">
+    const head = `<div class="head">
         <div>
           <p class="name">${esc(mk.name)}</p><p class="fam">${esc(mk.fam || "")}</p>
           <div class="px">${fmt(r.price, mk.dp)}</div>
         </div>
         <div class="ring" style="--p:${Math.round(w)};--ringc:${ringc}" role="img" aria-label="${Math.round(w)} % de trades gagnants par le passé"><b>${Math.round(w)} %<small>gagnants</small></b></div>
-      </div>
-      <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="kind ${p.kind === "signal" ? "ok" : ""}">${p.kind === "signal" ? "Signal confirmé" : "Tendance"}</span></div>
+      </div>`;
+    if (p.kind !== "signal") {
+      return `<article class="card glass" data-dir="${pl.dir}" style="--i:${i}">
+      ${head}
+      <div><span class="call">${sell ? "Baissier" : "Haussier"}</span><span class="kind">Tendance, pas d'entrée</span></div>
+      ${spark(r.spark)}
+      <p class="muted small">Le sens est là. Le prix n'est pas sur le repli, donc pas d'ordre.</p>
+    </article>`;
+    }
+    const [rk, rl] = riskOf(r, p), loss = lotLoss(r, pl.dist);
+    const key = keyOf(r, p), ch = choices[key] && choices[key].c;
+    const avg = p.rec.avg, avgTxt = (avg >= 0 ? "+" : "−") + num(Math.abs(avg), 2) + " R";
+    const lossTxt = loss != null ? `${num(loss, 2)} $ avec 0,01 lot` : `${distTxt(mk, pl.dist)} par unité`;
+    const shifted = Math.abs(r.price - pl.entry) > Math.pow(10, -mk.dp);
+    return `<article class="card glass" data-dir="${pl.dir}" data-choice="${ch || ""}" style="--i:${i}">
+      ${head}
+      <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="kind ok">Signal confirmé</span></div>
       ${spark(r.spark)}
       <dl class="lv">
         <div><dt>Entrée</dt><dd>${fmt(pl.entry, mk.dp)}</dd></div>
         <div><dt>Stop (SL)</dt><dd class="sl">${fmt(pl.sl, mk.dp)}</dd><span>${distTxt(mk, pl.dist)}</span></div>
         <div><dt>Objectif (TP)</dt><dd class="tp">${fmt(pl.tp, mk.dp)}</dd><span>${distTxt(mk, Math.abs(pl.tp - pl.entry))}</span></div>
       </dl>
+      ${shifted ? `<p class="muted small">Entre à ${fmt(pl.entry, mk.dp)}, pas au prix actuel.</p>` : ""}
       <div class="risk" data-r="${rk}">
         <b class="lvl">${rl}</b>
         <ul>
@@ -625,7 +637,7 @@ if (typeof document !== "undefined") (() => {
     const conf = ok.filter(x => x.p.kind === "signal").length;
     $("#headline").textContent = !reports.some(r => r.state !== "erreur") ? "Prix illisibles." : ok.length ? `${ok.length} marché${ok.length > 1 ? "s" : ""} à ${MIN_WIN} % ou plus.` : "Rien à proposer pour l'instant.";
     $("#sub").textContent = !reports.some(r => r.state !== "erreur") ? "La source des prix ne répond pas. Vérifiez la connexion, puis actualisez."
-      : `${conf ? `${conf} signal${conf > 1 ? "s" : ""} confirmé${conf > 1 ? "s" : ""}, le reste en simple tendance. ` : "Aucun signal confirmé : les fiches suivent la tendance, c'est plus risqué. "}Il faut gagner au moins ${num(BE, 0)} % des trades pour être rentable avec ces règles. C'est vous qui choisissez.`;
+      : `${conf ? `${conf} ordre${conf > 1 ? "s" : ""} sur repli. ` : "Aucun repli en ce moment. "}Les autres fiches donnent le sens, pas une entrée. Il faut gagner au moins ${num(BE, 0)} % des trades pour être rentable.`;
   }
   let simAmt = store.get("bt.simAmt", 10), simMode = store.get("bt.simMode", "risk");
   /* Gain si l'objectif est atteint, perte si le stop est touché, moyenne d'après le passé */
