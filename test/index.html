@@ -184,7 +184,7 @@ footer{padding:1rem 1.125rem;color:var(--muted);font-size:.875rem}
       <details>
         <summary>Comment lire une fiche</summary>
         <ol class="small">
-          <li><b>Signal confirmé</b> : le prix est revenu sur la moyenne et a refermé dans le sens. L'entrée est le prix de cette bougie, le stop est au-delà du repli. <b>Tendance</b> : le sens seulement. Pas d'entrée, pas de stop, pas d'objectif.</li>
+          <li><b>Ordre</b> : le sens vient de la tendance. On entre seulement au deuxième repli, quand le prix rejette un niveau, avant 30 % du mouvement. Le stop est derrière ce repli. L'objectif est la zone devant, pas le bout de la tendance. <b>Tendance</b> : le sens seulement, tant que ce moment n'est pas là.</li>
           <li>Le pourcentage est la part de trades gagnants de ce type sur ce marché, sur les ~80 derniers jours.</li>
           <li>L'objectif est à 0,75 fois la distance du stop. Il faut donc gagner au moins 57 % des trades pour être rentable. Sous ce seuil, le marché gagne souvent mais perd en moyenne.</li>
           <li>Le trade se ferme au plus tard au bout de 4 jours.</li>
@@ -306,6 +306,121 @@ const Engine = (() => {
     const sd = Math.sqrt(tr.reduce((s, x) => s + (x.net - avg) ** 2, 0) / Math.max(1, n - 1));
     return { n, wins: tr.filter(x => x.r > 0).length, gross: tr.reduce((s, x) => s + x.r, 0), net, avg, se: sd / Math.sqrt(n), medBars: median(tr.map(x => x.bars)) };
   }
+  function swingMarks(k, wing) {
+    const highs = [], lows = [];
+    for (let i = wing; i <= k.length - 1 - wing; i++) {
+      let hi = true, lo = true;
+      for (let j = i - wing; j <= i + wing; j++) {
+        if (j === i) continue;
+        if (k[j].h >= k[i].h) hi = false;
+        if (k[j].l <= k[i].l) lo = false;
+      }
+      if (hi) highs.push({ i, p: k[i].h });
+      if (lo) lows.push({ i, p: k[i].l });
+    }
+    return { highs, lows };
+  }
+  function priorTrend(k) {
+    const wing = 4;
+    if (k.length < wing * 8) return null;
+    const ranges = k.slice(-40).map(b => b.h - b.l).filter(x => x > 0).sort((a, b) => a - b);
+    const typical = ranges.length ? ranges[ranges.length >> 1] : 0;
+    if (!(typical > 0)) return null;
+    const raw = swingMarks(k, wing);
+    const from = Math.max(wing, k.length - 160);
+    const highs = raw.highs.filter(h => h.i >= from);
+    const lows = raw.lows.filter(l => l.i >= from);
+    if (!highs.length || !lows.length) return null;
+    const top = highs.reduce((a, b) => a.p >= b.p ? a : b);
+    const bot = lows.reduce((a, b) => a.p <= b.p ? a : b);
+    if (!(top.p - bot.p > typical * 6)) return null;
+    const last = k[k.length - 1].c;
+    const endedDown = bot.i > top.i && last > bot.p;
+    const endedUp = top.i > bot.i && last < top.p;
+    let dir, passage, origin, pool, side;
+    if (endedDown) {
+      dir = 1; passage = bot; origin = top; side = "h";
+      pool = highs.filter(h => h.i > top.i + wing && h.i < bot.i - wing);
+    } else if (endedUp) {
+      dir = -1; passage = top; origin = bot; side = "l";
+      pool = lows.filter(l => l.i > bot.i + wing && l.i < top.i - wing);
+    } else if (top.i >= bot.i) {
+      const before = highs.filter(h => h.i < bot.i - wing);
+      if (!before.length) return null;
+      const start = before.reduce((a, b) => a.p >= b.p ? a : b);
+      dir = 1; passage = bot; origin = start; side = "h";
+      pool = highs.filter(h => h.i > start.i + wing && h.i < bot.i - wing);
+    } else {
+      const before = lows.filter(l => l.i < top.i - wing);
+      if (!before.length) return null;
+      const start = before.reduce((a, b) => a.p <= b.p ? a : b);
+      dir = -1; passage = top; origin = start; side = "l";
+      pool = lows.filter(l => l.i > start.i + wing && l.i < top.i - wing);
+    }
+    if (pool.length < 1) return null;
+    const gap = Math.max(typical * 1.5, Math.abs(origin.p - passage.p) * 0.08);
+    const groups = [];
+    for (const s of pool.slice().sort((a, b) => a.p - b.p)) {
+      const g = groups[groups.length - 1];
+      if (g && s.p - g[0].p <= gap) g.push(s);
+      else groups.push([s]);
+    }
+    let shelves = groups.map(g => {
+      const prices = g.map(x => x.p).sort((a, b) => a - b);
+      return { price: prices[prices.length >> 1], at: Math.min(...g.map(x => x.i)), side };
+    }).filter(s => Math.abs(s.price - passage.p) > gap && s.at < passage.i);
+    if (!shelves.length) return null;
+    shelves.sort((a, b) => b.at - a.at);
+    shelves = shelves.slice(0, 4);
+    return { dir, passage: passage.i, passagePrice: passage.p, objective: origin.p, shelves };
+  }
+  /* Entrée, stop et objectif de CATRADE. Le sens, lui, doit être celui de la tendance du test. */
+  function catradeOrder(k, dir, live, now, cost) {
+    if (!dir || live == null || !k || k.length < 40) return null;
+    const prior = priorTrend(k);
+    if (!prior || prior.dir !== dir) return null;
+    const span = Math.abs(prior.objective - prior.passagePrice);
+    if (!(span > 0)) return null;
+    const done = dir > 0 ? (live - prior.passagePrice) / span : (prior.passagePrice - live) / span;
+    if (!(done >= 0 && done <= 0.3)) return null;
+    const { highs, lows } = swingMarks(k, 4);
+    const pulls = dir > 0
+      ? lows.filter(l => l.i > prior.passage && l.p > prior.passagePrice)
+      : highs.filter(h => h.i > prior.passage && h.p < prior.passagePrice);
+    if (pulls.length < 2) return null;
+    const family = dir > 0 ? lows : highs;
+    const last = pulls[pulls.length - 1];
+    if (!family.length || family[family.length - 1].i !== last.i) return null;
+    const ranges = k.slice(-40).map(b => b.h - b.l).filter(x => x > 0).sort((a, b) => a - b);
+    const room = ranges.length >= 8 ? ranges[ranges.length >> 1] : 0;
+    if (!(room > 0)) return null;
+    const shelf = prior.shelves.map(s => ({ ...s, d: Math.abs(last.p - s.price) })).sort((a, b) => a.d - b.d)[0];
+    if (!shelf || shelf.d > room * 1.5) return null;
+    const bar = k[k.length - 1];
+    const rejected = dir > 0
+      ? bar.l <= shelf.price + room && bar.c > shelf.price && bar.c > bar.o
+      : bar.h >= shelf.price - room && bar.c < shelf.price && bar.c < bar.o;
+    if (!rejected) return null;
+    const mates = family.filter(s => s.i <= last.i && last.i - s.i <= 16 && Math.abs(s.p - last.p) <= room * 1.5);
+    if (mates.length < 2) return null;
+    if (Math.abs(live - shelf.price) > span * 0.08) return null;
+    const extreme = dir > 0 ? Math.min(...mates.map(m => m.p)) : Math.max(...mates.map(m => m.p));
+    const entry = bar.c;
+    const sl = dir > 0 ? extreme - room * 2 : extreme + room * 2;
+    if (dir > 0 ? live <= sl : live >= sl) return null;
+    const ahead = prior.shelves.map(s => s.price).filter(p => dir > 0 ? p > entry + room : p < entry - room).sort((a, b) => dir > 0 ? a - b : b - a)[0];
+    if (ahead == null) return null;
+    const tp = entry + (ahead - entry) * 0.92;
+    if (dir > 0 ? !(tp > entry) : !(tp < entry)) return null;
+    if (dir > 0 ? live >= tp : live <= tp) return null;
+    const dist = Math.abs(entry - sl), reward = Math.abs(tp - entry);
+    if (!(dist >= room) || !(reward > dist)) return null;
+    return {
+      dir, kind: "PALIER", entry, sl, tp, dist, age: 0, prog: 0,
+      firedAt: bar.t, until: now + CFG.maxBars * STEP, costR: (cost || 0) * entry / dist,
+      note: "Deuxième repli. Le prix a rejeté le niveau. Stop derrière le creux. Objectif à la zone devant."
+    };
+  }
   function evaluate(mk, raw, now) {
     const rep = { id: mk.id, cls: mk.cls, state: "erreur", why: "indispo" };
     if (!Array.isArray(raw) || !raw.length) return rep;
@@ -322,28 +437,10 @@ const Engine = (() => {
     if (rep.dir && rep.atr > 0) { const dist = CFG.minDist * rep.atr; rep.tplan = { dir: rep.dir, entry: rep.price, sl: rep.price - rep.dir * dist, tp: rep.price + rep.dir * CFG.rr * dist, dist, until: now + CFG.maxBars * STEP, costR: mk.cost * rep.price / dist }; } rep.days = Math.round((n - CFG.warm) * STEP / 86400);
     if (weekend && fxBlocked(now)) { rep.state = "ferme"; rep.why = new Date(now * 1000).getUTCDay() === 5 ? "vendredi" : "weekend"; return rep; }
     if (rep.vr != null && rep.vr > CFG.chaos) { rep.state = "agite"; return rep; }
-    for (let age = 0; age <= 1; age++) {
-      const s = signalAt(P, i - age, weekend); if (!s) continue;
-      const after = closed.slice(s.i + 1).concat(live ? [live] : []);
-      const hi = Math.max(s.entry, ...after.map(x => x.h)), lo = Math.min(s.entry, ...after.map(x => x.l));
-      const prog = s.dir * (rep.price - s.entry) / s.dist;
-      rep.state = "passe";
-      if (s.dir > 0 ? lo <= s.sl : hi >= s.sl) rep.why = "stoppe";
-      else if (s.dir > 0 ? hi >= s.tp : lo <= s.tp) rep.why = "objectif";
-      else if (prog > 0.25) rep.why = "parti";
-      else if (prog < -0.3) rep.why = "fragile";
-      else {
-        const dist = s.dist;
-        rep.state = "signal"; rep.why = null;
-        rep.plan = { dir: s.dir, kind: s.kind, entry: s.entry, sl: s.sl, tp: s.tp, dist, age, prog,
-                     firedAt: s.t + STEP, until: s.t + STEP + CFG.maxBars * STEP, costR: mk.cost * s.entry / dist };
-        rep.checks = { vol: rep.vr >= 0.5 && rep.vr <= 1.5, frais: age === 0 && Math.abs(prog) <= 0.2, bilan: rep.record.n >= 8 && rep.record.net > 0 };
-        rep.score = (rep.checks.vol ? 1 : 0) + (rep.checks.frais ? 1 : 0) + (rep.checks.bilan ? 1 : 0);
-      }
-      return rep;
-    }
     if (!rep.dir) { rep.state = "neutre"; return rep; }
     rep.state = "attente"; rep.near = Math.abs(rep.price - rep.e20) <= rep.atr;
+    const order = catradeOrder(closed, rep.dir, rep.price, now, mk.cost);
+    if (order) { rep.state = "signal"; rep.why = null; rep.plan = order; rep.score = 1; }
     return rep;
   }
   /* Signaux actifs, du meilleur au moins bon */
@@ -521,7 +618,7 @@ if (typeof document !== "undefined") (() => {
     return { kind: "tendance", plan: r.tplan, rec: r.trendRecord };
   }
   const winPct = rec => rec && rec.n ? 100 * rec.wins / rec.n : 0;
-  const eligible = p => p && p.rec.n >= MIN_N && winPct(p.rec) >= MIN_WIN;
+  const eligible = p => p && (p.plan.kind === "PALIER" || (p.rec.n >= MIN_N && winPct(p.rec) >= MIN_WIN));
   const distTxt = (mk, d) => mk.pip ? Math.round(d / mk.pip) + " pips" : fmt(d, mk.dp) + (mk.cls === "synth" ? " pts" : " $");
   function lotLoss(r, d) {
     const mk = MK[r.id];
@@ -565,31 +662,28 @@ if (typeof document !== "undefined") (() => {
       ${head}
       <div><span class="call">${sell ? "Baissier" : "Haussier"}</span><span class="kind">Tendance, pas d'entrée</span></div>
       ${spark(r.spark)}
-      <p class="muted small">Le sens est là. Le prix n'est pas sur le repli, donc pas d'ordre.</p>
+      <p class="muted small">Le sens est là. Le moment d'entrer n'est pas encore là.</p>
     </article>`;
     }
     const [rk, rl] = riskOf(r, p), loss = lotLoss(r, pl.dist);
     const key = keyOf(r, p), ch = choices[key] && choices[key].c;
-    const avg = p.rec.avg, avgTxt = (avg >= 0 ? "+" : "−") + num(Math.abs(avg), 2) + " R";
     const lossTxt = loss != null ? `${num(loss, 2)} $ avec 0,01 lot` : `${distTxt(mk, pl.dist)} par unité`;
-    const shifted = Math.abs(r.price - pl.entry) > Math.pow(10, -mk.dp);
+    const orderHead = `<div class="head"><div><p class="name">${esc(mk.name)}</p><p class="fam">${esc(mk.fam || "")}</p><div class="px">${fmt(r.price, mk.dp)}</div></div></div>`;
     return `<article class="card glass" data-dir="${pl.dir}" data-choice="${ch || ""}" style="--i:${i}">
-      ${head}
-      <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="kind ok">Signal confirmé</span></div>
+      ${orderHead}
+      <div><span class="call">${sell ? "Vendre" : "Acheter"}</span><span class="kind ok">Entrée</span></div>
       ${spark(r.spark)}
       <dl class="lv">
         <div><dt>Entrée</dt><dd>${fmt(pl.entry, mk.dp)}</dd></div>
         <div><dt>Stop (SL)</dt><dd class="sl">${fmt(pl.sl, mk.dp)}</dd><span>${distTxt(mk, pl.dist)}</span></div>
         <div><dt>Objectif (TP)</dt><dd class="tp">${fmt(pl.tp, mk.dp)}</dd><span>${distTxt(mk, Math.abs(pl.tp - pl.entry))}</span></div>
       </dl>
-      ${shifted ? `<p class="muted small">Entre à ${fmt(pl.entry, mk.dp)}, pas au prix actuel.</p>` : ""}
+      <p class="muted small">${esc(pl.note || "Deuxième repli. Stop derrière le creux. Objectif à la zone devant.")}</p>
       <div class="risk" data-r="${rk}">
         <b class="lvl">${rl}</b>
         <ul>
           <li>Perte si le stop est touché : ${lossTxt}.</li>
-          <li>Par le passé, ${Math.round(100 - w)} % de ces trades ont fini perdants ou à plat (${p.rec.n} trades).</li>
-          <li>Résultat moyen par trade : ${avgTxt}${w < BE ? `, sous le seuil de ${num(BE, 0)} % : gagne souvent, perd en moyenne` : ""}.</li>
-          <li>À fermer au plus tard ${esc(dayHm(pl.until * 1000))}.</li>
+          <li>À fermer au stop ou à l'objectif. Pas avant.</li>
         </ul>
       </div>
       <details class="sim" data-key="${key}">
@@ -635,9 +729,9 @@ if (typeof document !== "undefined") (() => {
       return `<li><b>${esc(mk.name)}</b><b>${r.price != null ? fmt(r.price, mk.dp) : "?"}</b><span>${esc(why)}</span></li>`;
     }).join("") || `<li><span>Tous les marchés sont au-dessus de ${MIN_WIN} %.</span></li>`;
     const conf = ok.filter(x => x.p.kind === "signal").length;
-    $("#headline").textContent = !reports.some(r => r.state !== "erreur") ? "Prix illisibles." : ok.length ? `${ok.length} marché${ok.length > 1 ? "s" : ""} à ${MIN_WIN} % ou plus.` : "Rien à proposer pour l'instant.";
+    $("#headline").textContent = !reports.some(r => r.state !== "erreur") ? "Prix illisibles." : conf ? `${conf} entrée${conf > 1 ? "s" : ""}.` : ok.length ? "Sens connu, pas d'entrée." : "Rien à proposer pour l'instant.";
     $("#sub").textContent = !reports.some(r => r.state !== "erreur") ? "La source des prix ne répond pas. Vérifiez la connexion, puis actualisez."
-      : `${conf ? `${conf} ordre${conf > 1 ? "s" : ""} sur repli. ` : "Aucun repli en ce moment. "}Les autres fiches donnent le sens, pas une entrée. Il faut gagner au moins ${num(BE, 0)} % des trades pour être rentable.`;
+      : `${conf ? `${conf} entrée${conf > 1 ? "s" : ""}. ` : "Pas d'entrée en ce moment. "}Le sens reste celui de la tendance. On entre au deuxième repli, stop derrière le creux, objectif à la zone devant.`;
   }
   let simAmt = store.get("ctest.simAmt", 10), simMode = store.get("ctest.simMode", "risk");
   /* Gain si l'objectif est atteint, perte si le stop est touché, moyenne d'après le passé */
