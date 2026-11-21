@@ -151,7 +151,7 @@ footer{padding:1rem 1.125rem;color:var(--muted);font-size:.875rem}
 .alert-box .px{font:800 1.6rem/1 var(--display);margin:.35rem 0 .15rem}
 .pill{display:inline-block;margin:.35rem 0 0;padding:.2rem .6rem;border-radius:999px;font-size:.75rem;font-weight:800;background:rgba(255,255,255,.08)}
 .j-win{color:var(--buy);font-weight:800} .j-loss{color:var(--sell);font-weight:800}
-.levels{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin:1rem 0}
+.levels{display:grid;grid-template-columns:repeat(auto-fit,minmax(7rem,1fr));gap:.6rem;margin:1rem 0}
 .levels div{background:rgba(0,0,0,.18);border-radius:14px;padding:.7rem .75rem}
 .levels dt{color:var(--muted);font-size:.75rem;margin:0}
 .levels dd{margin:.2rem 0 0;font:800 1.05rem/1.2 var(--display)}
@@ -205,9 +205,10 @@ footer{padding:1rem 1.125rem;color:var(--muted);font-size:.875rem}
       <details>
         <summary>Comment lire une fiche</summary>
         <ol class="small">
-          <li><b>Alerte</b> : une seule. Achat ou vente, prix d'entrée, protection et objectif. On la suit jusqu'à la clôture.</li>
-          <li>S'il n'y en a pas, ce n'est pas un oubli : le moment d'entrer n'est pas là. Le sens reste visible dans les lectures.</li>
-          <li>La protection est le prix où la perte s'arrête. L'objectif est le prix où le gain est pris.</li>
+          <li><b>Alerte</b> : le sens, le marché exact, l'entrée, trois objectifs, la protection. On ne retire jamais la protection.</li>
+          <li>Quand le premier objectif est touché, on ne coupe pas. La protection passe au prix d'entrée, et la position continue vers le suivant.</li>
+          <li>Si le prix est déjà trop loin de l'entrée, on ne prend pas. S'il n'a pas encore atteint l'entrée, l'ordre attend.</li>
+          <li>Boom se vend avec la dérive. Crash s'achète avec la dérive. On ne fait pas l'inverse à cause du nom.</li>
         </ol>
       </details>
       <details>
@@ -756,10 +757,10 @@ if (typeof document !== "undefined") (() => {
       $("#headline").textContent = "Prix illisibles.";
       $("#sub").textContent = "La source des prix ne répond pas. Vérifie la connexion, puis actualise.";
     } else {
-      $("#headline").textContent = held ? `${held.dir < 0 ? "Vente" : "Achat"} retenu.` : "Rien à prendre.";
+      $("#headline").textContent = held ? `${held.dir < 0 ? "Vente" : "Achat"} retenu.` : "Analyse en cours.";
       $("#sub").textContent = held
-        ? "Une seule alerte. Entrée, protection, objectif. Tu décides, tu passes l'ordre."
-        : "Pas de deuxième repli dans le sens de la tendance. On ne remplit pas avec un autre signal.";
+        ? "Une alerte : entrée, protection, trois objectifs. Au premier objectif, on ne coupe pas."
+        : "En attente du prochain signal. Pas de sens et pas de niveau avant ça.";
     }
   }
   let simAmt = store.get("ctest.simAmt", 10), simMode = store.get("ctest.simMode", "risk");
@@ -789,44 +790,95 @@ if (typeof document !== "undefined") (() => {
     store.set("ctest.choices", choices); render(false);
   }
 
+  function synthOk(r) {
+    const mk = MK[r.id];
+    if (!mk || !["Volatility", "Boom", "Crash", "Jump", "Step"].includes(mk.fam)) return false;
+    if (mk.fam === "Boom" && r.plan.dir > 0) return false;
+    if (mk.fam === "Crash" && r.plan.dir < 0) return false;
+    return true;
+  }
+  function tropTard(dir, price, entry, sl, tp) {
+    if (!(price > 0) || !(sl > 0) || !(tp > 0)) return "niveaux";
+    if (dir > 0 ? price <= sl : price >= sl) return "protection";
+    if (dir > 0 ? price >= tp : price <= tp) return "tp";
+    const risque = Math.abs(entry - sl);
+    if (risque > 0 && Math.abs(price - entry) > 0.5 * risque) return "loin";
+    if (Math.abs(tp - price) / Math.abs(price - sl) < 1) return "risque";
+    return "";
+  }
   function bestSignal() {
-    const list = reports.filter(r => r.state === "signal" && r.plan && r.plan.kind === "PALIER" && MK[r.id] && (famFilter === "Tout" || MK[r.id].fam === famFilter));
+    const list = reports.filter(r => r.state === "signal" && r.plan && r.plan.kind === "PALIER" && synthOk(r) && (famFilter === "Tout" || MK[r.id].fam === famFilter));
     list.sort((a, b) => Math.abs(b.plan.tp - b.plan.entry) / b.plan.dist - Math.abs(a.plan.tp - a.plan.entry) / a.plan.dist);
     return list[0] || null;
   }
+  function fromPlan(best) {
+    const mk = MK[best.id], p = best.plan, risque = Math.abs(p.entry - p.sl);
+    return {
+      key: best.id + ":" + p.firedAt, id: best.id, name: mk.name, fam: mk.fam, dir: p.dir,
+      entry: p.entry, sl: p.sl, protection0: p.sl, dp: mk.dp,
+      tp1: p.entry + p.dir * risque, tp2: p.entry + p.dir * risque * 2, tp3: p.entry + p.dir * risque * 3,
+      tpAtteints: 0, filled: false, status: "cours", at: Date.now()
+    };
+  }
   function shownAlert() {
     const open = store.get("ctest.open", null);
-    if (open && open.status === "cours") return open;
+    if (open && open.status === "cours" && open.tp1 != null) return open;
+    if (open) store.set("ctest.open", null);
     const best = bestSignal();
     if (!best) return null;
-    const mk = MK[best.id], p = best.plan;
-    return { key: best.id + ":" + p.firedAt, id: best.id, name: mk.name, fam: mk.fam, dir: p.dir, entry: p.entry, sl: p.sl, tp: p.tp, dp: mk.dp, status: "cours" };
+    const open2 = fromPlan(best);
+    const live = reports.find(x => x.id === open2.id);
+    if (live && tropTard(open2.dir, live.price, open2.entry, open2.sl, open2.tp2)) return null;
+    return open2;
+  }
+  function notifyStep(open, title, body) {
+    const seen = store.get("ctest.seen", {}), k = open.key + ":" + title;
+    if (seen[k]) return;
+    seen[k] = 1; store.set("ctest.seen", seen);
+    fetch("https://ntfy.sh/" + TOPIC, { method: "POST", headers: { Title: title, Priority: "5", Tags: "bell", Click: "https://cathep.github.io/catrade/test/" }, body }).catch(() => {});
+    if (store.get("ctest.notif", false) && "Notification" in window && Notification.permission === "granted") {
+      try { new Notification(title, { body, icon: "icon-192.png", tag: k }); } catch (e) {}
+    }
   }
   function settle() {
     let open = store.get("ctest.open", null);
     if (open && open.status === "cours") {
       const r = reports.find(x => x.id === open.id);
       if (r && r.price != null) {
-        const hitSL = open.dir > 0 ? r.price <= open.sl : r.price >= open.sl;
-        const hitTP = open.dir > 0 ? r.price >= open.tp : r.price <= open.tp;
-        if (hitSL || hitTP) {
-          const done = { ...open, status: hitSL ? "protection" : "objectif", close: r.price, closedAt: Date.now() };
+        const price = r.price, dir = open.dir;
+        if (!open.filled && (dir > 0 ? price <= open.entry : price >= open.entry)) open.filled = true;
+        const targets = [open.tp1, open.tp2, open.tp3];
+        let k = open.tpAtteints || 0;
+        while (k < 3 && (dir > 0 ? price >= targets[k] : price <= targets[k])) k++;
+        if (k > (open.tpAtteints || 0)) {
+          open.tpAtteints = k;
+          open.sl = open.entry;
+          notifyStep(open, `TP${k} atteint · ${open.name}`, "On ne coupe pas. La protection passe au prix d'entrée. La position continue.");
+        }
+        const hitSL = dir > 0 ? price <= open.sl : price >= open.sl;
+        if (k >= 3 || hitSL) {
+          const secured = (open.tpAtteints || 0) > 0 && hitSL && k < 3;
+          const done = { ...open, status: k >= 3 || secured ? "objectif" : "protection", close: price, closedAt: Date.now(), tpAtteints: open.tpAtteints || 0 };
           const journal = store.get("ctest.journal", []);
           journal.unshift(done);
           store.set("ctest.journal", journal.slice(0, 40));
           store.set("ctest.open", null);
-          notifyClose(done);
+          const title = k >= 3 ? `Objectif atteint · ${open.name}` : secured ? `TP${open.tpAtteints} sécurisé · ${open.name}` : `Protection touchée · ${open.name}`;
+          notifyStep(open, title, `${fmt(open.entry, open.dp)} → ${fmt(price, open.dp)}`);
           open = null;
-        }
+        } else store.set("ctest.open", open);
       }
     }
     if (!open) {
       const best = bestSignal();
       if (best) {
-        const mk = MK[best.id], p = best.plan;
-        open = { key: best.id + ":" + p.firedAt, id: best.id, name: mk.name, fam: mk.fam, dir: p.dir, entry: p.entry, sl: p.sl, tp: p.tp, dp: mk.dp, at: Date.now(), status: "cours" };
-        store.set("ctest.open", open);
-        notifyOne(open);
+        const row = fromPlan(best);
+        const live = reports.find(x => x.id === row.id);
+        if (!(live && tropTard(row.dir, live.price, row.entry, row.sl, row.tp2))) {
+          if (live && (row.dir > 0 ? live.price <= row.entry : live.price >= row.entry)) row.filled = true;
+          store.set("ctest.open", row);
+          notifyStep(row, `${row.dir < 0 ? "VENTE" : "ACHAT"} ${row.name}`, `Entrée ${fmt(row.entry, row.dp)}\nProtection ${fmt(row.protection0, row.dp)}\nTP1 ${fmt(row.tp1, row.dp)}\nTP2 ${fmt(row.tp2, row.dp)}\nTP3 ${fmt(row.tp3, row.dp)}`);
+        }
       }
     }
   }
@@ -834,23 +886,30 @@ if (typeof document !== "undefined") (() => {
     const box = $("#alertBox");
     if (!box) return;
     if (!open) {
-      box.innerHTML = `<p class="alert-kicker">Aujourd'hui</p><p class="alert-dir">Rien à prendre</p><p class="muted small">Le sens est lu. L'entrée n'est pas là : pas de deuxième repli sur un niveau, dans ce sens. On ne force pas un trade.</p>`;
+      box.innerHTML = `<p class="alert-kicker">Aujourd'hui</p><p class="alert-dir">Analyse en cours</p><p class="muted small">En attente du prochain signal. Pas de sens et pas de niveau tant qu'il n'est pas là.</p>`;
       return;
     }
     const sell = open.dir < 0;
     const live = reports.find(x => x.id === open.id);
-    const px = live && live.price != null ? fmt(live.price, open.dp) : "";
-    const level = (label, cls, v) => `<div><dt>${label}</dt><dd class="${cls}">${fmt(v, open.dp)}</dd></div>`;
-    box.innerHTML = `<p class="alert-kicker">${esc(open.fam || "Alerte")}</p>
+    const px = live && live.price != null ? live.price : null;
+    const waiting = px != null && !open.filled && (open.dir > 0 ? px > open.entry : px < open.entry);
+    const k = open.tpAtteints || 0;
+    const etat = k > 0 ? `TP${k} atteint` : waiting ? "Signal disponible" : "En cours";
+    const suite = k > 0 ? `La protection est au prix d'entrée. La position continue vers le TP${Math.min(k + 1, 3)}.` : waiting ? (sell ? "L'entrée est au-dessus du prix : ordre en attente." : "L'entrée est sous le prix : ordre en attente.") : "Le prix évolue vers l'objectif.";
+    const level = (label, cls, v, done) => `<div><dt>${label}${done ? " · atteint" : ""}</dt><dd class="${cls}">${fmt(v, open.dp)}</dd></div>`;
+    box.innerHTML = `<p class="alert-kicker">${esc(open.fam || "")}</p>
       <p class="name">${esc(open.name)}</p>
       <p class="alert-dir ${sell ? "sell" : "buy"}">${sell ? "VENTE" : "ACHAT"}</p>
-      ${px ? `<p class="px">${px}</p>` : ""}
-      <span class="pill">En cours</span>
+      ${px != null ? `<p class="px">${fmt(px, open.dp)}</p>` : ""}
+      <span class="pill">${etat}</span>
       <div class="levels">
-        ${level("Entrée", "", open.entry)}
-        ${level("Protection", "sl", open.sl)}
-        ${level("Objectif", "tp", open.tp)}
+        ${level("Entrée", "", open.entry, false)}
+        ${level("Protection", "sl", open.sl, false)}
+        ${level("TP1", "tp", open.tp1, k >= 1)}
+        ${level("TP2", "tp", open.tp2, k >= 2)}
+        ${level("TP3", "tp", open.tp3, k >= 3)}
       </div>
+      <p class="muted small">${suite}</p>
       <button class="btn go" type="button" id="copyLevels">Copier les niveaux</button>
       <p class="muted small" id="copyMsg"></p>`;
   }
@@ -859,26 +918,13 @@ if (typeof document !== "undefined") (() => {
     const rows = store.get("ctest.journal", []);
     ul.innerHTML = rows.length ? rows.map(x => {
       const win = x.status === "objectif";
-      const pts = (x.close - x.entry) * (x.dir < 0 ? -1 : 1);
+      const k = x.tpAtteints || (win ? 3 : 0);
+      const last = k >= 3 ? x.tp3 : k === 2 ? x.tp2 : k === 1 ? x.tp1 : x.close;
+      const pts = (last - x.entry) * (x.dir < 0 ? -1 : 1);
       const signed = (pts >= 0 ? "+" : "−") + fmt(Math.abs(pts), x.dp);
-      return `<li><b>${esc(x.name)}</b><b class="${win ? "j-win" : "j-loss"}">${signed}</b><span>${x.dir < 0 ? "Vente" : "Achat"} · ${win ? "Objectif atteint" : "Protection touchée"}</span></li>`;
-    }).join("") : `<li><span>Aucune alerte classée. Une alerte y entre quand l'objectif ou la protection est touché.</span></li>`;
-  }
-  function notifyOne(open) {
-    const seen = store.get("ctest.seen", {});
-    if (seen[open.key]) return;
-    seen[open.key] = 1; store.set("ctest.seen", seen);
-    const title = `${open.dir < 0 ? "VENTE" : "ACHAT"} ${open.name}`;
-    const body = `Entrée ${fmt(open.entry, open.dp)}\nProtection ${fmt(open.sl, open.dp)}\nObjectif ${fmt(open.tp, open.dp)}`;
-    fetch("https://ntfy.sh/" + TOPIC, { method: "POST", headers: { Title: title, Priority: "5", Tags: "bell", Click: "https://cathep.github.io/catrade/test/" }, body }).catch(() => {});
-    if (store.get("ctest.notif", false) && "Notification" in window && Notification.permission === "granted") {
-      try { new Notification(title, { body, icon: "icon-192.png", tag: open.key }); } catch (e) {}
-    }
-  }
-  function notifyClose(done) {
-    const title = done.status === "objectif" ? `Objectif atteint · ${done.name}` : `Protection touchée · ${done.name}`;
-    const body = `${fmt(done.entry, done.dp)} → ${fmt(done.close, done.dp)}`;
-    fetch("https://ntfy.sh/" + TOPIC, { method: "POST", headers: { Title: title, Priority: "4", Tags: done.status === "objectif" ? "white_check_mark" : "octagonal_sign", Click: "https://cathep.github.io/catrade/test/" }, body }).catch(() => {});
+      const label = k >= 3 ? "TP3 atteint" : k > 0 ? `TP${k} sécurisé` : "Protection touchée";
+      return `<li><b>${esc(x.name)}</b><b class="${win ? "j-win" : "j-loss"}">${signed}</b><span>${x.dir < 0 ? "Vente" : "Achat"} · ${label}</span></li>`;
+    }).join("") : `<li><span>Aucune alerte classée. Une alerte y entre quand elle est terminée.</span></li>`;
   }
   function notifyNew() { settle(); render(false); }
 
@@ -938,7 +984,7 @@ if (typeof document !== "undefined") (() => {
     else if (b.id === "copyLevels") {
       const open = store.get("ctest.open", null) || shownAlert();
       if (!open) return;
-      const text = `${open.dir < 0 ? "VENTE" : "ACHAT"} ${open.name}\nEntrée : ${fmt(open.entry, open.dp)}\nProtection : ${fmt(open.sl, open.dp)}\nObjectif : ${fmt(open.tp, open.dp)}`;
+      const text = `${open.dir < 0 ? "VENTE" : "ACHAT"} ${open.name}\nEntrée : ${fmt(open.entry, open.dp)}\nProtection : ${fmt(open.sl, open.dp)}\nTP1 : ${fmt(open.tp1, open.dp)}\nTP2 : ${fmt(open.tp2, open.dp)}\nTP3 : ${fmt(open.tp3, open.dp)}`;
       const done = () => { const m = $("#copyMsg"); if (m) m.textContent = "Niveaux copiés."; };
       if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, () => { const m = $("#copyMsg"); if (m) m.textContent = text; });
       else { const m = $("#copyMsg"); if (m) m.textContent = text; }
