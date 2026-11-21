@@ -145,6 +145,19 @@ footer{padding:1rem 1.125rem;color:var(--muted);font-size:.875rem}
 .fams{display:flex;flex-wrap:wrap;gap:.5rem;margin:0 0 1rem}
 .fams button{min-height:40px;padding:.4rem .9rem;border-radius:999px;border:1px solid var(--edge);background:var(--glass);font-weight:700}
 .fams button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.alert-box{padding:1.25rem 1.25rem 1rem;margin-bottom:1rem}
+.alert-kicker{color:var(--muted);font-size:.8rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin:0 0 .35rem}
+.alert-dir{font:800 1.75rem/1 var(--display);margin:0}
+.alert-dir.buy{color:var(--buy)} .alert-dir.sell{color:var(--sell)}
+.levels{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin:1rem 0}
+.levels div{background:rgba(0,0,0,.18);border-radius:14px;padding:.7rem .75rem}
+.levels dt{color:var(--muted);font-size:.75rem;margin:0}
+.levels dd{margin:.2rem 0 0;font:800 1.05rem/1.2 var(--display)}
+.levels .sl{color:var(--sell)} .levels .tp{color:var(--buy)}
+.lectures{margin-bottom:1rem;padding:1rem 1.1rem}
+.lectures summary{font-weight:800;cursor:pointer}
+@media (max-width:40rem){.levels{grid-template-columns:1fr}}
+
 .fam{margin:.15rem 0 0;color:var(--muted);font-size:.75rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
 
 </style>
@@ -161,17 +174,23 @@ footer{padding:1rem 1.125rem;color:var(--muted);font-size:.875rem}
   </header>
 
   <section class="hero glass" aria-live="polite">
-    <h2 id="headline">Lecture des marchés.</h2>
-    <p id="sub">Même lecture que Bero-Trade, plus les familles d'indices CATRADE. Seuls les marchés à au moins un gagnant sur deux restent en fiche.</p>
+    <h2 id="headline">Une alerte, pas un flux.</h2>
+    <p id="sub">Le sens vient de la tendance. S'il y a une entrée, une seule est retenue : achat ou vente, entrée, protection, objectif. Sinon, on dit pourquoi il n'y a rien à prendre.</p>
     <p class="status muted" id="status" role="status"></p>
   </section>
 
   <div class="fams" id="fams" role="tablist" aria-label="Familles"></div>
-  <div class="grid" id="grid"></div>
+  <section class="glass alert-box" id="alertBox" aria-live="polite"></section>
+  <details class="lectures glass">
+    <summary>Les lectures, sans entrée</summary>
+    <div class="grid" id="grid"></div>
+  </details>
 
   <div class="cols">
     <section class="panel glass" aria-labelledby="h-oth">
-      <h3 class="sec" id="h-oth">Les autres marchés</h3>
+      <h3 class="sec" id="h-oth">Journal</h3>
+      <ul class="others" id="journal"><li><span>Aucune alerte classée pour l'instant.</span></li></ul>
+      <h3 class="sec" id="h-rest">Le reste</h3>
       <ul class="others" id="others"><li><span>Lecture en cours.</span></li></ul>
     </section>
 
@@ -184,10 +203,9 @@ footer{padding:1rem 1.125rem;color:var(--muted);font-size:.875rem}
       <details>
         <summary>Comment lire une fiche</summary>
         <ol class="small">
-          <li><b>Ordre</b> : le sens vient de la tendance. On entre seulement au deuxième repli, quand le prix rejette un niveau, avant 30 % du mouvement. Le stop est derrière ce repli. L'objectif est la zone devant, pas le bout de la tendance. <b>Tendance</b> : le sens seulement, tant que ce moment n'est pas là.</li>
-          <li>Le pourcentage est la part de trades gagnants de ce type sur ce marché, sur les ~80 derniers jours.</li>
-          <li>L'objectif est à 0,75 fois la distance du stop. Il faut donc gagner au moins 57 % des trades pour être rentable. Sous ce seuil, le marché gagne souvent mais perd en moyenne.</li>
-          <li>Le trade se ferme au plus tard au bout de 4 jours.</li>
+          <li><b>Alerte</b> : une seule. Achat ou vente, prix d'entrée, protection et objectif. On la suit jusqu'à la clôture.</li>
+          <li>S'il n'y en a pas, ce n'est pas un oubli : le moment d'entrer n'est pas là. Le sens reste visible dans les lectures.</li>
+          <li>La protection est le prix où la perte s'arrête. L'objectif est le prix où le gain est pris.</li>
         </ol>
       </details>
       <details>
@@ -713,7 +731,8 @@ if (typeof document !== "undefined") (() => {
     const items = shown.map(r => ({ r, p: proposal(r) }));
     if (!reports.length) {
       $("#headline").textContent = famFilter === "Tout" ? "Choisis une famille." : "Lecture…";
-      $("#sub").textContent = "Seule la famille choisie est lue. Tout charge les 68 marchés, c'est long.";
+      $("#sub").textContent = "Seule la famille choisie est lue. Une seule alerte est retenue.";
+      $("#alertBox").innerHTML = "";
       $("#grid").innerHTML = "";
       $("#others").innerHTML = `<li><span>${famFilter === "Tout" ? "Choisis Volatility, Boom, Crash, Jump, Step ou une autre famille." : "Lecture en cours."}</span></li>`;
       return;
@@ -728,10 +747,18 @@ if (typeof document !== "undefined") (() => {
       const why = !p ? (OTHER[r.state] || OTHER.neutre)(r) : p.rec.n < MIN_N ? `${sens}, mais trop peu de trades passés pour juger (${p.rec.n}).` : `${sens}, mais seulement ${Math.round(winPct(p.rec))} % de gagnants par le passé (${p.rec.n} trades).`;
       return `<li><b>${esc(mk.name)}</b><b>${r.price != null ? fmt(r.price, mk.dp) : "?"}</b><span>${esc(why)}</span></li>`;
     }).join("") || `<li><span>Tous les marchés sont au-dessus de ${MIN_WIN} %.</span></li>`;
-    const conf = ok.filter(x => x.p.kind === "signal").length;
-    $("#headline").textContent = !reports.some(r => r.state !== "erreur") ? "Prix illisibles." : conf ? `${conf} entrée${conf > 1 ? "s" : ""}.` : ok.length ? "Sens connu, pas d'entrée." : "Rien à proposer pour l'instant.";
-    $("#sub").textContent = !reports.some(r => r.state !== "erreur") ? "La source des prix ne répond pas. Vérifiez la connexion, puis actualisez."
-      : `${conf ? `${conf} entrée${conf > 1 ? "s" : ""}. ` : "Pas d'entrée en ce moment. "}Le sens reste celui de la tendance. On entre au deuxième repli, stop derrière le creux, objectif à la zone devant.`;
+    const held = shownAlert();
+    paintAlert(held);
+    paintJournal();
+    if (!reports.some(r => r.state !== "erreur")) {
+      $("#headline").textContent = "Prix illisibles.";
+      $("#sub").textContent = "La source des prix ne répond pas. Vérifie la connexion, puis actualise.";
+    } else {
+      $("#headline").textContent = held ? `${held.dir < 0 ? "Vente" : "Achat"} retenu.` : "Rien à prendre.";
+      $("#sub").textContent = held
+        ? "Une seule alerte. Entrée, protection, objectif. Tu décides, tu passes l'ordre."
+        : "Pas de deuxième repli dans le sens de la tendance. On ne remplit pas avec un autre signal.";
+    }
   }
   let simAmt = store.get("ctest.simAmt", 10), simMode = store.get("ctest.simMode", "risk");
   /* Gain si l'objectif est atteint, perte si le stop est touché, moyenne d'après le passé */
@@ -760,23 +787,92 @@ if (typeof document !== "undefined") (() => {
     store.set("ctest.choices", choices); render(false);
   }
 
-  function notifyNew() {
-    const seen = store.get("ctest.seen", {});
-    const browser = store.get("ctest.notif", false) && "Notification" in window && Notification.permission === "granted";
-    for (const r of Engine.rank(reports)) {
-      const key = r.id + ":" + r.plan.firedAt; if (seen[key]) continue; seen[key] = 1;
-      const mk = MK[r.id], p = r.plan;
-      const title = `CATRADE Test : ${p.dir < 0 ? "vendre" : "acheter"} ${mk.name}`;
-      const body = `Entrée ${fmt(p.entry, mk.dp)}\nSL ${fmt(p.sl, mk.dp)}\nTP ${fmt(p.tp, mk.dp)}`;
-      fetch("https://ntfy.sh/" + TOPIC, {
-        method: "POST",
-        headers: { Title: title, Priority: "5", Tags: "bell", Click: "https://cathep.github.io/catrade/test/" },
-        body,
-      }).catch(() => {});
-      if (browser) { try { new Notification(title, { body, icon: "icon-192.png", tag: key }); } catch (e) {} }
-    }
-    store.set("ctest.seen", seen);
+  function bestSignal() {
+    const list = reports.filter(r => r.state === "signal" && r.plan && r.plan.kind === "PALIER" && MK[r.id] && (famFilter === "Tout" || MK[r.id].fam === famFilter));
+    list.sort((a, b) => Math.abs(b.plan.tp - b.plan.entry) / b.plan.dist - Math.abs(a.plan.tp - a.plan.entry) / a.plan.dist);
+    return list[0] || null;
   }
+  function shownAlert() {
+    const open = store.get("ctest.open", null);
+    if (open && open.status === "cours") return open;
+    const best = bestSignal();
+    if (!best) return null;
+    const mk = MK[best.id], p = best.plan;
+    return { key: best.id + ":" + p.firedAt, id: best.id, name: mk.name, fam: mk.fam, dir: p.dir, entry: p.entry, sl: p.sl, tp: p.tp, dp: mk.dp, status: "cours" };
+  }
+  function settle() {
+    let open = store.get("ctest.open", null);
+    if (open && open.status === "cours") {
+      const r = reports.find(x => x.id === open.id);
+      if (r && r.price != null) {
+        const hitSL = open.dir > 0 ? r.price <= open.sl : r.price >= open.sl;
+        const hitTP = open.dir > 0 ? r.price >= open.tp : r.price <= open.tp;
+        if (hitSL || hitTP) {
+          const done = { ...open, status: hitSL ? "protection" : "objectif", close: r.price, closedAt: Date.now() };
+          const journal = store.get("ctest.journal", []);
+          journal.unshift(done);
+          store.set("ctest.journal", journal.slice(0, 40));
+          store.set("ctest.open", null);
+          notifyClose(done);
+          open = null;
+        }
+      }
+    }
+    if (!open) {
+      const best = bestSignal();
+      if (best) {
+        const mk = MK[best.id], p = best.plan;
+        open = { key: best.id + ":" + p.firedAt, id: best.id, name: mk.name, fam: mk.fam, dir: p.dir, entry: p.entry, sl: p.sl, tp: p.tp, dp: mk.dp, at: Date.now(), status: "cours" };
+        store.set("ctest.open", open);
+        notifyOne(open);
+      }
+    }
+  }
+  function paintAlert(open) {
+    const box = $("#alertBox");
+    if (!box) return;
+    if (!open) {
+      box.innerHTML = `<p class="alert-kicker">Aujourd'hui</p><p class="alert-dir">Rien à prendre</p><p class="muted small">Le sens est lu. L'entrée n'est pas là : pas de deuxième repli sur un niveau, dans ce sens. On ne force pas un trade.</p>`;
+      return;
+    }
+    const sell = open.dir < 0;
+    const level = (label, cls, v) => `<div><dt>${label}</dt><dd class="${cls}">${fmt(v, open.dp)}</dd></div>`;
+    box.innerHTML = `<p class="alert-kicker">${esc(open.fam || "")} · suivie jusqu'à la clôture</p>
+      <p class="name">${esc(open.name)}</p>
+      <p class="alert-dir ${sell ? "sell" : "buy"}">${sell ? "VENTE" : "ACHAT"}</p>
+      <div class="levels">
+        ${level("Entrée", "", open.entry)}
+        ${level("Protection", "sl", open.sl)}
+        ${level("Objectif", "tp", open.tp)}
+      </div>
+      <button class="btn go" type="button" id="copyLevels">Copier les niveaux</button>
+      <p class="muted small" id="copyMsg"></p>`;
+  }
+  function paintJournal() {
+    const ul = $("#journal"); if (!ul) return;
+    const rows = store.get("ctest.journal", []);
+    ul.innerHTML = rows.length ? rows.map(x => {
+      const win = x.status === "objectif";
+      return `<li><b>${esc(x.name)}</b><b>${win ? "Objectif" : "Protection"}</b><span>${x.dir < 0 ? "Vente" : "Achat"} ${fmt(x.entry, x.dp)} → ${fmt(x.close, x.dp)}</span></li>`;
+    }).join("") : `<li><span>Aucune alerte classée. Une alerte y entre quand l'objectif ou la protection est touché.</span></li>`;
+  }
+  function notifyOne(open) {
+    const seen = store.get("ctest.seen", {});
+    if (seen[open.key]) return;
+    seen[open.key] = 1; store.set("ctest.seen", seen);
+    const title = `${open.dir < 0 ? "VENTE" : "ACHAT"} ${open.name}`;
+    const body = `Entrée ${fmt(open.entry, open.dp)}\nProtection ${fmt(open.sl, open.dp)}\nObjectif ${fmt(open.tp, open.dp)}`;
+    fetch("https://ntfy.sh/" + TOPIC, { method: "POST", headers: { Title: title, Priority: "5", Tags: "bell", Click: "https://cathep.github.io/catrade/test/" }, body }).catch(() => {});
+    if (store.get("ctest.notif", false) && "Notification" in window && Notification.permission === "granted") {
+      try { new Notification(title, { body, icon: "icon-192.png", tag: open.key }); } catch (e) {}
+    }
+  }
+  function notifyClose(done) {
+    const title = done.status === "objectif" ? `Objectif atteint · ${done.name}` : `Protection touchée · ${done.name}`;
+    const body = `${fmt(done.entry, done.dp)} → ${fmt(done.close, done.dp)}`;
+    fetch("https://ntfy.sh/" + TOPIC, { method: "POST", headers: { Title: title, Priority: "4", Tags: done.status === "objectif" ? "white_check_mark" : "octagonal_sign", Click: "https://cathep.github.io/catrade/test/" }, body }).catch(() => {});
+  }
+  function notifyNew() { settle(); render(false); }
 
   async function scan() {
     const gen = ++scanGen;
@@ -831,7 +927,14 @@ if (typeof document !== "undefined") (() => {
     else if (b.dataset.take) choose(b.dataset.take, "pris");
     else if (b.dataset.skip) choose(b.dataset.skip, "passe");
     else if (b.dataset.undo) choose(b.dataset.undo, null);
-    else if (b.id === "copyTopic") {
+    else if (b.id === "copyLevels") {
+      const open = store.get("ctest.open", null) || shownAlert();
+      if (!open) return;
+      const text = `${open.dir < 0 ? "VENTE" : "ACHAT"} ${open.name}\nEntrée : ${fmt(open.entry, open.dp)}\nProtection : ${fmt(open.sl, open.dp)}\nObjectif : ${fmt(open.tp, open.dp)}`;
+      const done = () => { const m = $("#copyMsg"); if (m) m.textContent = "Niveaux copiés."; };
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, () => { const m = $("#copyMsg"); if (m) m.textContent = text; });
+      else { const m = $("#copyMsg"); if (m) m.textContent = text; }
+    } else if (b.id === "copyTopic") {
       const done = () => { $("#notifMsg").textContent = "Sujet copié. Dans ntfy, appuie sur + et colle-le."; };
       const text = TOPIC;
       if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, () => { $("#notifMsg").textContent = "Copie à la main : " + text; });
