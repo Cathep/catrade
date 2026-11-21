@@ -148,7 +148,9 @@ footer{padding:1rem 1.125rem;color:var(--muted);font-size:.875rem}
 .alert-box{padding:1.25rem 1.25rem 1rem;margin-bottom:1rem}
 .alert-kicker{color:var(--muted);font-size:.8rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin:0 0 .35rem}
 .alert-dir{font:800 1.75rem/1 var(--display);margin:0}
-.alert-dir.buy{color:var(--buy)} .alert-dir.sell{color:var(--sell)}
+.alert-box .px{font:800 1.6rem/1 var(--display);margin:.35rem 0 .15rem}
+.pill{display:inline-block;margin:.35rem 0 0;padding:.2rem .6rem;border-radius:999px;font-size:.75rem;font-weight:800;background:rgba(255,255,255,.08)}
+.j-win{color:var(--buy);font-weight:800} .j-loss{color:var(--sell);font-weight:800}
 .levels{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin:1rem 0}
 .levels div{background:rgba(0,0,0,.18);border-radius:14px;padding:.7rem .75rem}
 .levels dt{color:var(--muted);font-size:.75rem;margin:0}
@@ -836,10 +838,14 @@ if (typeof document !== "undefined") (() => {
       return;
     }
     const sell = open.dir < 0;
+    const live = reports.find(x => x.id === open.id);
+    const px = live && live.price != null ? fmt(live.price, open.dp) : "";
     const level = (label, cls, v) => `<div><dt>${label}</dt><dd class="${cls}">${fmt(v, open.dp)}</dd></div>`;
-    box.innerHTML = `<p class="alert-kicker">${esc(open.fam || "")} · suivie jusqu'à la clôture</p>
+    box.innerHTML = `<p class="alert-kicker">${esc(open.fam || "Alerte")}</p>
       <p class="name">${esc(open.name)}</p>
       <p class="alert-dir ${sell ? "sell" : "buy"}">${sell ? "VENTE" : "ACHAT"}</p>
+      ${px ? `<p class="px">${px}</p>` : ""}
+      <span class="pill">En cours</span>
       <div class="levels">
         ${level("Entrée", "", open.entry)}
         ${level("Protection", "sl", open.sl)}
@@ -853,7 +859,9 @@ if (typeof document !== "undefined") (() => {
     const rows = store.get("ctest.journal", []);
     ul.innerHTML = rows.length ? rows.map(x => {
       const win = x.status === "objectif";
-      return `<li><b>${esc(x.name)}</b><b>${win ? "Objectif" : "Protection"}</b><span>${x.dir < 0 ? "Vente" : "Achat"} ${fmt(x.entry, x.dp)} → ${fmt(x.close, x.dp)}</span></li>`;
+      const pts = (x.close - x.entry) * (x.dir < 0 ? -1 : 1);
+      const signed = (pts >= 0 ? "+" : "−") + fmt(Math.abs(pts), x.dp);
+      return `<li><b>${esc(x.name)}</b><b class="${win ? "j-win" : "j-loss"}">${signed}</b><span>${x.dir < 0 ? "Vente" : "Achat"} · ${win ? "Objectif atteint" : "Protection touchée"}</span></li>`;
     }).join("") : `<li><span>Aucune alerte classée. Une alerte y entre quand l'objectif ou la protection est touché.</span></li>`;
   }
   function notifyOne(open) {
