@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CADRAGE — Analyses foot et basket</title>
+    <meta
+      name="description"
+      content="Matchs de football et de basketball, cotes du marché, et une seule option retenue."
+    />
+    <link rel="icon" href="favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,460;9..144,560&family=Outfit:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <p class="mark">CADRAGE</p>
+        <h1>L'analyse du match, foot et basket.</h1>
+      </div>
+      <nav class="sports" aria-label="Sport">
+        <button type="button" data-sport="football" aria-pressed="true">Football</button>
+        <button type="button" data-sport="basketball" aria-pressed="false">Basketball</button>
+      </nav>
+    </header>
+
+    <div class="bar">
+      <div class="day">
+        <button type="button" id="prev" aria-label="Jour précédent">‹</button>
+        <p id="day-label"></p>
+        <button type="button" id="next" aria-label="Jour suivant">›</button>
+      </div>
+      <input id="q" type="search" placeholder="Équipe" aria-label="Chercher une équipe" />
+    </div>
+    <div id="chips" class="chips"></div>
+
+    <main class="layout">
+      <section aria-label="Matchs">
+        <div id="list" class="list"></div>
+      </section>
+      <section id="detail" class="detail" hidden></section>
+    </main>
+    <p class="note">
+      Calendrier et cotes ESPN. La meilleure option est calculée sur le marché, pas une cote 1xBet en direct.
+      Ce n'est pas un conseil de pari.
+    </p>
+    <script src="app.js"></script>
+  </body>
+</html>
